@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Web Monitor & Sender</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <svg class="brand-icon" viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+          <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.84 9.84 0 0 0 12.04 2z"/>
+        </svg>
+        <span class="brand-title">WA Monitor & Sender</span>
+      </div>
+      <div id="statusBadge" class="status-badge status-active">
+        <span class="status-dot"></span>
+        <span id="statusText">Active</span>
+      </div>
+    </header>
+
+    <!-- Tab Navigation -->
+    <nav class="nav-tabs">
+      <button id="tabMonitorBtn" class="nav-tab active">Monitor</button>
+      <button id="tabSendBtn" class="nav-tab">Send Message</button>
+      <button id="tabSyncBtn" class="nav-tab">Sync & Webhook</button>
+    </nav>
+
+    <!-- TAB 1: MONITOR DASHBOARD -->
+    <div id="viewMonitor" class="view-panel">
+      <div class="stats-card">
+        <div class="stat-item">
+          <span class="stat-value" id="totalCount">0</span>
+          <span class="stat-label">Total Stored</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+          <span class="stat-value" id="lastTimeVal">--:--</span>
+          <span class="stat-label">Last Message</span>
+        </div>
+      </div>
+
+      <section class="section">
+        <h3 class="section-title">Last Captured Message</h3>
+        
+        <div id="emptyState" class="empty-state">
+          <p>No messages captured yet.</p>
+          <span class="empty-sub">Open WhatsApp Web to monitor messages.</span>
+        </div>
+
+        <div id="messageDetails" class="message-card hidden">
+          <div class="message-header">
+            <span id="directionBadge" class="badge badge-incoming">INCOMING</span>
+            <span id="typeVal" class="badge badge-type">TEXT</span>
+          </div>
+          
+          <div class="detail-row">
+            <span class="detail-label">Sender / Receiver:</span>
+            <span id="senderVal" class="detail-value font-bold">--</span>
+          </div>
+
+          <div class="detail-row">
+            <span class="detail-label">Chat:</span>
+            <span id="chatVal" class="detail-value">--</span>
+          </div>
+
+          <div class="detail-row">
+            <span class="detail-label">Phone:</span>
+            <span id="phoneVal" class="detail-value">--</span>
+          </div>
+
+          <div class="detail-row text-block">
+            <span class="detail-label">Message / Caption:</span>
+            <p id="msgVal" class="message-text">--</p>
+          </div>
+
+          <div id="attachmentMetaRow" class="detail-row text-block hidden">
+            <span class="detail-label">Attachment:</span>
+            <span id="attachmentMetaVal" class="detail-value font-bold accent-text">--</span>
+          </div>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <button id="clearBtn" class="btn-clear">Clear Storage</button>
+      </footer>
+    </div>
+
+    <!-- TAB 2: AUTOMATIC MESSAGE & ATTACHMENT SENDER -->
+    <div id="viewSend" class="view-panel hidden">
+      <form id="sendForm" class="form-container">
+        <div class="form-row">
+          <div class="form-group code-group">
+            <label for="countryCode">Country Code</label>
+            <input type="text" id="countryCode" placeholder="+91" value="+91" required>
+          </div>
+          <div class="form-group phone-group">
+            <label for="phoneNumber">Phone Number</label>
+            <input type="tel" id="phoneNumber" placeholder="9876543210" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="messageText">Message / Caption</label>
+          <textarea id="messageText" rows="3" placeholder="Please check the attached document..."></textarea>
+        </div>
+
+        <!-- Attachment Picker -->
+        <div class="form-group file-picker-group">
+          <label>Attachment (Image, Video, Document, Audio)</label>
+          
+          <label for="attachmentPicker" class="file-drop-area" id="dropArea">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5a2.5 2.5 0 0 1 5 0v10.5c0 .83-.67 1.5-1.5 1.5s-1.5-.67-1.5-1.5V6H9v9.5a3 3 0 0 0 6 0V5c0-2.21-1.79-4-4-4s-4 1.79-4 4v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/>
+            </svg>
+            <span id="fileDropText">Click to choose a file...</span>
+            <input type="file" id="attachmentPicker" class="hidden-input">
+          </label>
+
+          <!-- File Selected Preview Badge -->
+          <div id="filePreviewCard" class="file-preview-card hidden">
+            <div class="file-info">
+              <span id="fileNameVal" class="file-name">invoice.pdf</span>
+              <span id="fileSizeVal" class="file-size">122.7 KB</span>
+            </div>
+            <button type="button" id="removeFileBtn" class="btn-remove-file">Remove</button>
+          </div>
+        </div>
+
+        <!-- Progress / Error Banner -->
+        <div id="progressBanner" class="progress-banner hidden">
+          <span id="progressText" class="progress-text">Opening WhatsApp...</span>
+        </div>
+
+        <button type="submit" id="submitSendBtn" class="btn-primary">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+          Send Message & Attachment
+        </button>
+      </form>
+    </div>
+
+    <!-- TAB 3: CHAT SYNCHRONIZATION & N8N WEBHOOK SETTINGS -->
+    <div id="viewSync" class="view-panel hidden">
+      <div class="stats-card">
+        <div class="stat-item">
+          <span class="stat-value" id="syncedChatsVal">0</span>
+          <span class="stat-label">Synced Chats</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+          <span class="stat-value" id="syncedMsgsVal">0</span>
+          <span class="stat-label">Synced Messages</span>
+        </div>
+      </div>
+
+      <div class="form-container">
+        <div class="form-group toggle-group">
+          <label class="toggle-label">
+            <input type="checkbox" id="syncEnableToggle" checked>
+            <span class="toggle-text font-bold">Automatic Chat Sync</span>
+          </label>
+          <span class="empty-sub">Sync open conversation data automatically when chat opens.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="webhookUrlInput">n8n / Backend Webhook URL</label>
+          <input type="url" id="webhookUrlInput" placeholder="https://ai-workflow.smartsight.in/webhook/whatsapp-sync" value="https://ai-workflow.smartsight.in/webhook/whatsapp-sync" required>
+        </div>
+
+        <div id="syncFeedbackBanner" class="progress-banner hidden">
+          <span id="syncFeedbackText" class="progress-text">Settings saved.</span>
+        </div>
+
+        <div class="btn-group-row">
+          <button type="button" id="saveSyncSettingsBtn" class="btn-secondary">Save Settings</button>
+          <button type="button" id="syncActiveNowBtn" class="btn-primary">Sync Active Chat Now</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
