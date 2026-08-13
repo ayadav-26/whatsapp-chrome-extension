@@ -88,7 +88,7 @@ window.WAMonitor.Constants = {
 
     // Media
     MEDIA_IMAGE: "img[src*='blob:'], img[src*='pps.whatsapp.net'], div[aria-label*='Photo']",
-    MEDIA_VIDEO: "video, span[data-icon='media-play'], div[aria-label*='Video']",
+    MEDIA_VIDEO: "video, span[data-icon='media-play'], span[data-icon*='play'], span[data-icon*='video'], div[aria-label*='Video'], div[aria-label*='video'], div[data-testid*='video']",
     MEDIA_AUDIO: "audio, span[data-icon='audio-download'], span[data-icon='ptt-play']",
     MEDIA_VOICE_NOTE: "div[aria-label*='voice message'], div[aria-label*='audio']",
     MEDIA_DOCUMENT: "span[data-icon='document'], div[aria-label*='Document']",
@@ -98,7 +98,13 @@ window.WAMonitor.Constants = {
     // Timestamp & Sidebar
     TIMESTAMP: "div[data-pre-plain-text], span[dir='ltr'], div._ak8i",
     SIDEBAR_ROW: "#pane-side div[role='listitem'], #pane-side div._ak72, #pane-side div._ak7h",
-    SIDEBAR_TIMESTAMP: "div._ak8i, div._ak8f, div._ak8j"
+    SIDEBAR_TIMESTAMP: "div._ak8i, div._ak8f, div._ak8j",
+
+    // Media Downloader & Status Selectors
+    STATUS_CONTAINER: "div[data-animate-status-item], #app div[role='dialog'] video, #app div[role='dialog'] img[src*='blob:'], div._ak8l",
+    STATUS_MEDIA_ITEM: "div[role='dialog'] video, div[role='dialog'] img",
+    MEDIA_OVERLAY_CONTAINER: "#main header div[role='toolbar'], #main header div._ak6r, #main header",
+    MESSAGE_MEDIA_ITEM: "#main div.message-in img, #main div.message-out img, #main div.message-in video, #main div.message-out video, #main div.message-in audio, #main div.message-out audio, #main div.message-in a[href*='blob:'], #main div.message-out a[href*='blob:']"
   },
 
   // File Upload Limits & Allowed Extensions
@@ -108,6 +114,15 @@ window.WAMonitor.Constants = {
     VIDEO_EXTENSIONS: ["mp4", "mov", "avi", "mkv", "webm"],
     DOCUMENT_EXTENSIONS: ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "zip", "rar"],
     AUDIO_EXTENSIONS: ["mp3", "wav", "m4a", "ogg"]
+  },
+
+  // Media Categories for Downloader Filter
+  MEDIA_CATEGORIES: {
+    IMAGE: "IMAGE",
+    VIDEO: "VIDEO",
+    AUDIO: "AUDIO",
+    DOCUMENT: "DOCUMENT",
+    STICKER: "STICKER"
   },
 
   // Storage Keys
@@ -120,15 +135,22 @@ window.WAMonitor.Constants = {
     SYNCED_MESSAGES: "whatsapp_synced_messages",
     WEBHOOK_URL: "whatsapp_sync_webhook_url",
     SYNC_ENABLED: "whatsapp_sync_enabled",
-    LAST_SYNC_TIME: "whatsapp_last_sync_time"
+    LAST_SYNC_TIME: "whatsapp_last_sync_time",
+    DOWNLOAD_SETTINGS: "whatsapp_download_settings",
+    DOWNLOAD_HISTORY: "whatsapp_download_history"
   },
 
-  // Configuration
+  // Configuration & Filename Patterns
   CONFIG: {
     LOG_PREFIX: "[WA Monitor]",
     MAX_PROCESSED_IDS_CACHE: 3000,
     CHAT_LOAD_TIMEOUT_MS: 30000,
-    PREVIEW_LOAD_TIMEOUT_MS: 15000
+    PREVIEW_LOAD_TIMEOUT_MS: 15000,
+    FILENAME_TEMPLATES: {
+      DEFAULT: "{Date}_{ChatName}_{Sender}_{FileName}",
+      SIMPLE: "{ChatName}_{Index}",
+      DETAILED: "{Date}_{Time}_{ChatName}_{Sender}_{Type}_{Index}"
+    }
   },
 
   // Chat Synchronization Defaults
@@ -139,3 +161,4 @@ window.WAMonitor.Constants = {
     MAX_RETRY_ATTEMPTS: 3
   }
 };
+

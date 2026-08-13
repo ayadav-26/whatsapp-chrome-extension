@@ -119,17 +119,160 @@
   // 1. Start DOM Observer engine for message monitoring
   O.start(handleCapturedMessage);
 
-  // 2. Check and execute any automated message/attachment send tasks
+  // 2. Initialize In-Page Media Downloader Overlay UI
+  if (window.WAMonitor?.MediaOverlay) {
+    window.WAMonitor.MediaOverlay.init();
+  }
+
+  // 3. Check and execute any automated message/attachment send tasks
   setTimeout(checkAndExecuteSendTask, 1500);
+
+  // ── WAMD Communication Bridge (Page Script <-> Content Script <-> Background) ──
+  window.addEventListener('message', (ev) => {
+    const data = ev.data;
+    if (!data || data.__from !== 'wamd:inpage') return;
+
+    if (data.type === 'wa:download') {
+      try {
+        chrome.runtime.sendMessage(
+          { type: 'wa:download', payload: data.payload },
+          (res) => {
+            try {
+              window.postMessage({
+                __from: 'wamd:content',
+                type: 'wa:download:ack',
+                id: data.id,
+                res: res || { ok: false, error: chrome.runtime.lastError?.message || 'no response' }
+              }, '*');
+            } catch {}
+          }
+        );
+      } catch (e) {
+        window.postMessage({
+          __from: 'wamd:content',
+          type: 'wa:download:ack',
+          id: data.id,
+          res: { ok: false, error: String(e) }
+        }, '*');
+      }
+      return;
+    }
+
+    try {
+      chrome.runtime.sendMessage({ __from: 'wamd:content', payload: data });
+    } catch {}
+  });
 
   // Handle Background & Popup messages
   if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+      if (request && request.__to === 'wamd:content') {
+        if (request.payload && request.payload.type === 'ping') {
+          sendResponse({ ok: true, pong: true });
+          return true;
+        }
+        try {
+          window.postMessage(request.payload, '*');
+          sendResponse({ ok: true });
+        } catch (e) {
+          sendResponse({ ok: false, error: String(e) });
+        }
+        return true;
+      }
+
       if (!H.isContextValid()) return false;
 
       if (request.action === "EXECUTE_IN_PAGE_SEND") {
         checkAndExecuteSendTask();
         sendResponse({ received: true });
+        return true;
+      }
+
+      if (request.action === "GET_AVAILABLE_CHATS") {
+        const MD = window.WAMonitor?.MediaDownloader;
+        if (MD) {
+          const chats = MD.getAvailableChats();
+          sendResponse({ success: true, chats: chats });
+        } else {
+          sendResponse({ success: false, error: "MediaDownloader module not loaded." });
+        }
+        return true;
+      }
+
+      if (request.action === "SCAN_CHAT_MEDIA") {
+        const MD = window.WAMonitor?.MediaDownloader;
+        if (MD) {
+          if (typeof MD.scanActiveChatMediaAsync === "function") {
+            MD.scanActiveChatMediaAsync(request.filters || {}, (items) => {
+              sendResponse({ success: true, mediaItems: items, count: items.length });
+            });
+          } else {
+            const items = MD.scanActiveChatMedia(request.filters || {});
+            sendResponse({ success: true, mediaItems: items, count: items.length });
+          }
+        } else {
+          sendResponse({ success: false, error: "MediaDownloader module not loaded." });
+        }
+        return true;
+      }
+
+      if (request.action === "DOWNLOAD_MEDIA_ZIP") {
+        const MD = window.WAMonitor?.MediaDownloader;
+        if (MD) {
+          MD.downloadAsZip(request.mediaItems || [], request.options || {}, (progress) => {
+            try {
+              if (chrome.runtime && chrome.runtime.sendMessage) {
+                chrome.runtime.sendMessage({
+                  type: "MEDIA_DOWNLOAD_PROGRESS",
+                  payload: progress
+                });
+              }
+            } catch (e) {}
+          });
+          sendResponse({ success: true, started: true });
+        } else {
+          sendResponse({ success: false, error: "MediaDownloader module not loaded." });
+        }
+        return true;
+      }
+
+      if (request.action === "START_DEEP_SCAN") {
+        const DS = window.WAMonitor?.DeepScanner;
+        if (DS) {
+          DS.start(request.options || {}, (progress) => {
+            try {
+              if (chrome.runtime && chrome.runtime.sendMessage) {
+                chrome.runtime.sendMessage({
+                  type: "DEEP_SCAN_PROGRESS",
+                  payload: progress
+                });
+              }
+            } catch (e) {}
+          }, (result) => {
+            try {
+              if (chrome.runtime && chrome.runtime.sendMessage) {
+                chrome.runtime.sendMessage({
+                  type: "DEEP_SCAN_COMPLETED",
+                  payload: result
+                });
+              }
+            } catch (e) {}
+          });
+          sendResponse({ success: true, started: true });
+        } else {
+          sendResponse({ success: false, error: "DeepScanner module not loaded." });
+        }
+        return true;
+      }
+
+      if (request.action === "DOWNLOAD_ACTIVE_STATUS") {
+        const MD = window.WAMonitor?.MediaDownloader;
+        if (MD) {
+          MD.downloadActiveStatus();
+          sendResponse({ success: true });
+        } else {
+          sendResponse({ success: false, error: "MediaDownloader module not loaded." });
+        }
         return true;
       }
 
@@ -204,3 +347,4 @@
     });
   }
 })();
+

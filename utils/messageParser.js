@@ -14,7 +14,7 @@ window.WAMonitor.MessageParser = {
   getChatName: function () {
     const C = window.WAMonitor.Constants;
     const headerTitleEl = document.querySelector(C.SELECTORS.CHAT_TITLE);
-    
+
     if (headerTitleEl) {
       return window.WAMonitor.Helpers.cleanText(headerTitleEl.getAttribute("title") || headerTitleEl.textContent);
     }
@@ -33,9 +33,6 @@ window.WAMonitor.MessageParser = {
     if (node.querySelector(C.SELECTORS.MEDIA_VOICE_NOTE)) {
       return C.MESSAGE_TYPES.VOICE_NOTE;
     }
-    if (node.querySelector(C.SELECTORS.MEDIA_IMAGE)) {
-      return C.MESSAGE_TYPES.IMAGE;
-    }
     if (node.querySelector(C.SELECTORS.MEDIA_VIDEO)) {
       return C.MESSAGE_TYPES.VIDEO;
     }
@@ -47,6 +44,9 @@ window.WAMonitor.MessageParser = {
     }
     if (node.querySelector(C.SELECTORS.MEDIA_CONTACT)) {
       return C.MESSAGE_TYPES.CONTACT;
+    }
+    if (node.querySelector(C.SELECTORS.MEDIA_IMAGE)) {
+      return C.MESSAGE_TYPES.IMAGE;
     }
     if (node.querySelector(C.SELECTORS.TEXT_CONTENT)) {
       return C.MESSAGE_TYPES.TEXT;
@@ -101,19 +101,29 @@ window.WAMonitor.MessageParser = {
   /**
    * Helper to extract valid image URL from img tags or inline CSS background-image
    */
+  /**
+   * Helper to extract valid image/video/media URL from DOM elements
+   */
   getMediaUrlFromNode: function (node) {
     if (!node || !(node instanceof HTMLElement)) return "";
 
-    // 1. Try standard <img> elements (checking src, data-src)
+    // 1. Try <video> element properties & attributes
+    const videoEl = node.querySelector("video");
+    if (videoEl) {
+      const vSrc = videoEl.src || videoEl.currentSrc || videoEl.getAttribute("src") || videoEl.querySelector("source")?.src || videoEl.querySelector("source")?.getAttribute("src") || videoEl.poster || videoEl.getAttribute("poster") || "";
+      if (vSrc && !vSrc.startsWith("javascript:")) return vSrc;
+    }
+
+    // 2. Try standard <img> elements (checking src, data-src)
     const imgEls = node.querySelectorAll("img");
     for (const img of imgEls) {
-      const src = img.getAttribute("src") || img.getAttribute("data-src") || "";
-      if (src && !src.startsWith("data:image/gif;base64,R0lGODlh")) {
+      const src = img.src || img.getAttribute("src") || img.getAttribute("data-src") || "";
+      if (src && !src.startsWith("data:image/gif;base64,R0lGODlh") && !src.startsWith("javascript:")) {
         return src;
       }
     }
 
-    // 2. Try elements with inline background-image style
+    // 3. Try elements with inline background-image style
     const bgEls = node.querySelectorAll("[style*='background-image'], [style*='background:']");
     for (const el of bgEls) {
       const styleStr = el.getAttribute("style") || "";
@@ -123,24 +133,17 @@ window.WAMonitor.MessageParser = {
       }
     }
 
-    // 3. Try <video> poster or src
-    const videoEl = node.querySelector("video");
-    if (videoEl) {
-      const videoSrc = videoEl.getAttribute("src") || videoEl.querySelector("source")?.getAttribute("src") || videoEl.getAttribute("poster") || "";
-      if (videoSrc) return videoSrc;
-    }
-
     // 4. Try <audio> src
     const audioEl = node.querySelector("audio");
     if (audioEl) {
-      const audioSrc = audioEl.getAttribute("src") || audioEl.querySelector("source")?.getAttribute("src") || "";
+      const audioSrc = audioEl.src || audioEl.currentSrc || audioEl.getAttribute("src") || audioEl.querySelector("source")?.src || audioEl.querySelector("source")?.getAttribute("src") || "";
       if (audioSrc) return audioSrc;
     }
 
     // 5. Try <a> download/blob links
     const linkEl = node.querySelector("a[href*='blob:'], a[href*='whatsapp.net'], a[href]");
     if (linkEl) {
-      const href = linkEl.getAttribute("href") || "";
+      const href = linkEl.getAttribute("href") || linkEl.href || "";
       if (href && !href.startsWith("javascript:")) return href;
     }
 
@@ -175,10 +178,12 @@ window.WAMonitor.MessageParser = {
     else if (type === C.MESSAGE_TYPES.VIDEO) {
       const videoEl = node.querySelector("video");
       if (videoEl) {
-        mediaUrl = videoEl.getAttribute("src") || videoEl.querySelector("source")?.getAttribute("src") || "";
+        mediaUrl = videoEl.src || videoEl.currentSrc || videoEl.getAttribute("src") || videoEl.querySelector("source")?.src || videoEl.querySelector("source")?.getAttribute("src") || "";
+        thumbUrl = videoEl.poster || videoEl.getAttribute("poster") || "";
       }
-      thumbUrl = this.getMediaUrlFromNode(node);
-      if (!mediaUrl) mediaUrl = thumbUrl;
+      const fallbackUrl = this.getMediaUrlFromNode(node);
+      if (!thumbUrl) thumbUrl = fallbackUrl;
+      if (!mediaUrl) mediaUrl = fallbackUrl || thumbUrl;
       fileName = "video.mp4";
     }
 
@@ -279,7 +284,7 @@ window.WAMonitor.MessageParser = {
 
     // Smart 1-on-1 Chat Heuristic: In a chat named "Roshan SSI", if preTextData sender is "Akash", it is ME (Outgoing)
     const isSenderDifferentFromChat = preTextData.senderName && chatName && chatName !== "Unknown Chat" &&
-                                      preTextData.senderName.toLowerCase().trim() !== chatName.toLowerCase().trim();
+      preTextData.senderName.toLowerCase().trim() !== chatName.toLowerCase().trim();
 
     let isOutgoing = false;
     if (isParentOutgoing || hasOutgoingJid || hasOutgoingIcons || isSenderDifferentFromChat) {
@@ -363,6 +368,7 @@ window.WAMonitor.MessageParser = {
         timestamp: timestamp,
         chatId: chatId,
         messageId: finalMessageId,
+        domNode: messageElement,
         capturedAt: new Date().toISOString(),
         status: C.STATUS.NEW
       };
@@ -380,6 +386,7 @@ window.WAMonitor.MessageParser = {
         timestamp: timestamp,
         chatId: chatId,
         messageId: finalMessageId,
+        domNode: messageElement,
         capturedAt: new Date().toISOString(),
         status: C.STATUS.SENT
       };

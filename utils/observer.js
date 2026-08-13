@@ -158,7 +158,7 @@ window.WAMonitor.Observer = {
     const P = window.WAMonitor.MessageParser;
     const H = window.WAMonitor.Helpers;
 
-    const delays = [350, 850, 1800];
+    const delays = [350, 850, 1800, 3500];
 
     delays.forEach((delay) => {
       setTimeout(() => {
@@ -166,7 +166,7 @@ window.WAMonitor.Observer = {
 
         const updatedMsg = P.parseMessage(node);
         if (updatedMsg && updatedMsg.attachment && updatedMsg.attachment.mediaUrl) {
-          if (!initialMsg.attachment.mediaUrl || initialMsg.attachment.mediaUrl !== updatedMsg.attachment.mediaUrl) {
+          if (!initialMsg.attachment?.mediaUrl || initialMsg.attachment.mediaUrl !== updatedMsg.attachment.mediaUrl) {
             H.log(`Media URL resolved after ${delay}ms for message:`, "info", updatedMsg.messageId);
             initialMsg.attachment.mediaUrl = updatedMsg.attachment.mediaUrl;
             initialMsg.attachment.thumbUrl = updatedMsg.attachment.thumbUrl || updatedMsg.attachment.mediaUrl;

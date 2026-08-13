@@ -106,30 +106,87 @@ window.WAMonitor.SyncManager = {
           mediaUrl: att.mediaUrl || "",
           thumbUrl: att.thumbUrl || "",
           base64Data: "",
+          directPath: "",
+          mediaKey: "",
+          encFilehash: "",
+          filehash: "",
+          fileSize: 0,
+          cdnUrl: "",
           isDownloaded: !!(att.mediaUrl && (att.mediaUrl.startsWith("blob:") || att.mediaUrl.startsWith("http"))),
           timestamp: msg.timestamp || new Date().toLocaleTimeString(),
-          sender: msg.senderName || "Unknown"
+          sender: msg.senderName || "Unknown",
+          domNode: msg.domNode || null
         });
       }
     });
 
-    // 2. Asynchronously convert blob URLs to Base64 data strings for permanent storage
+    // 2. Asynchronously extract CDN download metadata and convert blob URLs / DOM elements to Base64
     const MP = window.WAMonitor.MediaParser;
     const blobPromises = payloadMedia.map((m) => {
       return new Promise((resolve) => {
-        const targetUrl = m.mediaUrl || m.thumbUrl;
-        if (targetUrl && targetUrl.startsWith("blob:") && MP && MP.convertBlobToBase64) {
-          MP.convertBlobToBase64(targetUrl, (base64) => {
-            if (base64) m.base64Data = base64;
-            resolve();
+        const primaryUrl = m.mediaUrl;
+        const fallbackUrl = m.thumbUrl;
+        const domNode = m.domNode;
+        const isVideo = (m.mediaType === "VIDEO" || m.mediaType === "video");
+
+        const fetchCdnMeta = (next) => {
+          if (MP && MP.fetchMediaCdnMetadata && m.messageId) {
+            MP.fetchMediaCdnMetadata(m.messageId, (cdnMeta) => {
+              if (cdnMeta) {
+                m.directPath = cdnMeta.directPath || "";
+                m.mediaKey = cdnMeta.mediaKey || "";
+                m.encFilehash = cdnMeta.encFilehash || "";
+                m.filehash = cdnMeta.filehash || "";
+                m.fileSize = cdnMeta.fileSize || 0;
+                m.cdnUrl = cdnMeta.cdnUrl || "";
+              }
+              next();
+            });
+          } else {
+            next();
+          }
+        };
+
+        fetchCdnMeta(() => {
+          const attemptConvert = (url, node, next) => {
+            if (MP && MP.convertBlobToBase64) {
+              MP.convertBlobToBase64(url, (base64) => {
+                if (base64 && (!isVideo || !base64.startsWith("data:image/"))) {
+                  m.base64Data = base64;
+                  resolve();
+                } else {
+                  next();
+                }
+              }, node, m.messageId, m.mediaType, m.mimeType);
+            } else {
+              next();
+            }
+          };
+
+          attemptConvert(primaryUrl, domNode, () => {
+            if (!isVideo) {
+              attemptConvert(fallbackUrl, domNode, () => {
+                if (domNode && MP && MP.convertElementToCanvasBase64) {
+                  const canvasBase64 = MP.convertElementToCanvasBase64(domNode);
+                  if (canvasBase64) {
+                    m.base64Data = canvasBase64;
+                  }
+                }
+                resolve();
+              });
+            } else {
+              resolve();
+            }
           });
-        } else {
-          resolve();
-        }
+        });
       });
     });
 
     Promise.all(blobPromises).then(() => {
+      // Clean up domNode reference before JSON stringifying payload
+      payloadMedia.forEach((m) => {
+        delete m.domNode;
+      });
       // 3. Generate structured payload matching n8n / PostgreSQL schema
       const syncPayload = {
         chat: {
@@ -201,16 +258,16 @@ window.WAMonitor.SyncManager = {
       },
       body: JSON.stringify(payload)
     })
-    .then((response) => {
-      if (response.ok) {
-        if (typeof callback === "function") callback(true, null);
-      } else {
-        if (typeof callback === "function") callback(false, `HTTP ${response.status}: ${response.statusText}`);
-      }
-    })
-    .catch((err) => {
-      if (typeof callback === "function") callback(false, err?.message || "Network error or Webhook unreachable.");
-    });
+      .then((response) => {
+        if (response.ok) {
+          if (typeof callback === "function") callback(true, null);
+        } else {
+          if (typeof callback === "function") callback(false, `HTTP ${response.status}: ${response.statusText}`);
+        }
+      })
+      .catch((err) => {
+        if (typeof callback === "function") callback(false, err?.message || "Network error or Webhook unreachable.");
+      });
   },
 
   /**

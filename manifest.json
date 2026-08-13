@@ -1,11 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "WhatsApp Web Message Monitor & Sender",
-  "version": "1.3.0",
-  "description": "Production-quality Chrome Extension for real-time message monitoring, capture, automatic message & attachment sending, and smart tab reuse on WhatsApp Web.",
+  "name": "WhatsApp Web Message Monitor & Media Downloader Pro",
+  "version": "2.0.0",
+  "description": "Production-quality Chrome Extension for real-time message monitoring, automatic sending, API sync, and bulk media downloading as ZIP on WhatsApp Web.",
   "permissions": [
     "storage",
-    "tabs"
+    "unlimitedStorage",
+    "tabs",
+    "downloads",
+    "scripting"
   ],
   "host_permissions": [
     "https://web.whatsapp.com/*",
@@ -21,6 +24,16 @@
         "https://web.whatsapp.com/*"
       ],
       "js": [
+        "injected.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://web.whatsapp.com/*"
+      ],
+      "js": [
         "utils/constants.js",
         "utils/helpers.js",
         "utils/tabManager.js",
@@ -30,17 +43,37 @@
         "utils/messageSender.js",
         "utils/mediaParser.js",
         "utils/messageParser.js",
+        "utils/jszip.min.js",
+        "utils/deepScanner.js",
+        "utils/mediaDownloader.js",
+        "utils/mediaOverlay.js",
         "utils/storage.js",
         "utils/chatDetector.js",
         "utils/syncManager.js",
         "utils/observer.js",
+        "services/media-extractor.js",
         "content.js"
       ],
       "run_at": "document_idle"
     }
   ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "injected.js",
+        "inpage/vendor/wppconnect-wa-wrapped.js",
+        "inpage/app.js",
+        "inpage/wa-injector.js",
+        "lib/wppconnect-wa-wrapped.js"
+      ],
+      "matches": [
+        "https://web.whatsapp.com/*"
+      ]
+    }
+  ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "WhatsApp Monitor & Sender"
+    "default_title": "WhatsApp Monitor & Media Downloader Pro"
   }
 }
+
