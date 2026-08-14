@@ -1,15 +1,18 @@
 // inpage/app.js — verbose logging + robust download fallback + correct ACK count
 (function () {
-  // --- Guard per evitare doppia iniezione ---
-  if (window.__WAMD_APP_LOADED__) {
+  const APP_VERSION = '5.3.0';
+
+  // --- Guard per evitare doppia iniezione della stessa versione ---
+  if (window.__WAMD_APP_VERSION__ === APP_VERSION) {
     window.postMessage({
       __from: 'wamd:inpage',
       type: 'wa:log',
-      message: 'app.js già caricato'
+      message: 'app.js (v5.3.0) already active'
     }, '*');
     return;
   }
   window.__WAMD_APP_LOADED__ = true;
+  window.__WAMD_APP_VERSION__ = APP_VERSION;
 
   // --- util comuni ---
   // NB: per i log il popup si aspetta "message", non "payload"
@@ -190,8 +193,8 @@ function makeFilename({ chatName, senderName, ts, index, mime, caption, extHint,
 
 
   // --- readiness basata sulle API realmente usate ---
-  // Nelle versioni recenti di WA-JS webpack.isReady()/isReady() può restare false
-  // anche quando WPP.chat è già perfettamente utilizzabile. In quel caso il vecchio
+  // Nelle versioni recenti di WA-JS webpack.isReady()/isReady() puÃ² restare false
+  // anche quando WPP.chat Ã¨ giÃ  perfettamente utilizzabile. In quel caso il vecchio
   // controllo introduceva 8 secondi di attesa a ogni comando.
   let wppReadyConfirmed = false;
 
@@ -337,7 +340,7 @@ function makeFilename({ chatName, senderName, ts, index, mime, caption, extHint,
 }
 
 
-  // --- API: carica più messaggi ---
+  // --- API: carica piÃ¹ messaggi ---
   async function loadMoreMessages(chatId) {
     await ensureReady();
     try {
@@ -357,7 +360,7 @@ function makeFilename({ chatName, senderName, ts, index, mime, caption, extHint,
       await new Promise(r => setTimeout(r, 500));
       
       // 2. Trova l'elemento scrollabile
-      // Secondo i test dell'utente, l'elemento #4 è quello giusto con queste classi:
+      // Secondo i test dell'utente, l'elemento #4 Ã¨ quello giusto con queste classi:
       // x10l6tqk x13vifvy x1o0tod xupqr0c x9f619 x78zum5 xdt5ytf xh8yej3 x5yr21d x6ikm8r x1rife3k xjbqb8w x1ewm37j
       
       log('Searching for scroll container...');
@@ -414,7 +417,7 @@ function makeFilename({ chatName, senderName, ts, index, mime, caption, extHint,
         
         log(`Found ${scrollables.length} scrollable elements`);
         
-        // Ordina per dimensione (più grande probabilmente è il container principale)
+        // Ordina per dimensione (piÃ¹ grande probabilmente Ã¨ il container principale)
         scrollables.sort((a, b) => b.scrollHeight - a.scrollHeight);
         
         // Log dei primi 5
@@ -422,7 +425,7 @@ function makeFilename({ chatName, senderName, ts, index, mime, caption, extHint,
           log(`Scrollable #${i}: scrollHeight=${s.scrollHeight}, clientHeight=${s.clientHeight}, classes="${s.classes.substring(0, 50)}"`);
         });
         
-        // Usa il 4° o il più grande se ce ne sono meno
+        // Usa il 4Â° o il piÃ¹ grande se ce ne sono meno
         const targetIndex = Math.min(4, scrollables.length - 1);
         if (scrollables[targetIndex]) {
           scrollContainer = scrollables[targetIndex].element;
@@ -438,7 +441,7 @@ function makeFilename({ chatName, senderName, ts, index, mime, caption, extHint,
       log(`Using scroll container: scrollHeight=${scrollContainer.scrollHeight}, clientHeight=${scrollContainer.clientHeight}`);
       
       // 3. SCROLL PROGRESSIVO AGGRESSIVO verso l'alto
-      // Forziamo WhatsApp a caricare più messaggi vecchi scrollando progressivamente
+      // Forziamo WhatsApp a caricare piÃ¹ messaggi vecchi scrollando progressivamente
       const initialScrollTop = scrollContainer.scrollTop;
       const scrollSteps = 10; // Numero di step per lo scroll
       const scrollAmount = 500; // Pixel per step (totale = 5000 pixel verso l'alto)
@@ -491,7 +494,7 @@ function makeFilename({ chatName, senderName, ts, index, mime, caption, extHint,
         if (innerDiv) {
           const textDiv = innerDiv.querySelector('div');
           if (textDiv && textDiv.textContent.trim().length > 0) {
-            // Questo è molto probabilmente il pulsante di caricamento messaggi
+            // Questo Ã¨ molto probabilmente il pulsante di caricamento messaggi
             log(`Found candidate button with text: "${textDiv.textContent.substring(0, 50)}..."`);
             loadMoreBtn = btn;
             break;
@@ -508,7 +511,7 @@ function makeFilename({ chatName, senderName, ts, index, mime, caption, extHint,
           if (innerDiv) {
             const textDiv = innerDiv.querySelector('div');
             if (textDiv && textDiv.textContent.trim().length > 30) {
-              // Il testo deve essere abbastanza lungo (il messaggio tipico è lungo)
+              // Il testo deve essere abbastanza lungo (il messaggio tipico Ã¨ lungo)
               log(`Found alternative button with text: "${textDiv.textContent.substring(0, 50)}..."`);
               loadMoreBtn = btn;
               break;
@@ -527,7 +530,7 @@ function makeFilename({ chatName, senderName, ts, index, mime, caption, extHint,
           
           // Il pulsante deve essere:
           // 1. Nella parte superiore visibile (0-400px)
-          // 2. Avere testo lungo (il messaggio è tipicamente 40-100 caratteri)
+          // 2. Avere testo lungo (il messaggio Ã¨ tipicamente 40-100 caratteri)
           // 3. NON contenere parole comuni di altri pulsanti (call, menu, etc)
           if (rect.top >= 0 && rect.top < 400 && text.length > 35 && text.length < 150) {
             const lowerText = text.toLowerCase();
@@ -556,18 +559,18 @@ function makeFilename({ chatName, senderName, ts, index, mime, caption, extHint,
           return { ok: false, error: 'Button disappeared' };
         }
         
-        // Verifica le proprietà di visibilità PRIMA dello scrollIntoView
+        // Verifica le proprietÃ  di visibilitÃ  PRIMA dello scrollIntoView
         let rect = loadMoreBtn.getBoundingClientRect();
         let isVisible = rect.width > 0 && rect.height > 0 && rect.top >= 0 && rect.top < window.innerHeight;
         log(`Button visibility check (before scroll): width=${rect.width}, height=${rect.height}, top=${rect.top}, visible=${isVisible}`);
         
-        // Se il pulsante NON è visibile, forza lo scroll del container a top
+        // Se il pulsante NON Ã¨ visibile, forza lo scroll del container a top
         if (!isVisible || rect.top < 0) {
           log('Button not visible, forcing scroll to top...');
           scrollContainer.scrollTop = 0;
           await new Promise(r => setTimeout(r, 300));
           
-          // Ri-controlla la visibilità
+          // Ri-controlla la visibilitÃ 
           rect = loadMoreBtn.getBoundingClientRect();
           isVisible = rect.width > 0 && rect.height > 0 && rect.top >= 0 && rect.top < window.innerHeight;
           log(`Button visibility check (after forced scroll): width=${rect.width}, height=${rect.height}, top=${rect.top}, visible=${isVisible}`);
@@ -602,7 +605,7 @@ function makeFilename({ chatName, senderName, ts, index, mime, caption, extHint,
         // OK, ora possiamo cliccare
         log('Button is visible and ready, clicking...');
         
-        // Prova sia click() che dispatchEvent per massima compatibilità
+        // Prova sia click() che dispatchEvent per massima compatibilitÃ 
         try {
           // Metodo 1: Click diretto
           loadMoreBtn.click();
@@ -735,7 +738,7 @@ function resolveExt({ message, mime, kind }) {
   
   
 
-  // --- fetch dei messaggi con media (paginando all’indietro) ---
+  // --- fetch dei messaggi con media (paginando allâ€™indietro) ---
 async function fetchMediaMessages({ chatId, types, from, to, estimatedBatch = 200, maxBatches = 20 }) {
   const out = [];
   const seenIds = new Set();
@@ -774,7 +777,7 @@ const opts = {
   count: estimatedBatch,
   direction: anchorSerPrev ? 'before' : undefined,
   id: anchorSerPrev || undefined,
-  // NOTE: evitare media:'all' (può rompere su alcune chat / build)
+  // NOTE: evitare media:'all' (puÃ² rompere su alcune chat / build)
 };
 
 
@@ -791,8 +794,8 @@ const opts = {
 
     if (!totalRaw) { log(`getMessages() batch#${batchNo}: vuoto, stop`); break; }
 
-    // Se WPP restituisce messaggi di un'altra chat (capita quando la chat non è inizializzata),
-    // NON mischiare mai: filtra e, se quasi tutto è mismatch nel primo batch, apri la chat e riparti una sola volta.
+    // Se WPP restituisce messaggi di un'altra chat (capita quando la chat non Ã¨ inizializzata),
+    // NON mischiare mai: filtra e, se quasi tutto Ã¨ mismatch nel primo batch, apri la chat e riparti una sola volta.
     const mism = (batch || []).filter(m => {
       const c = msgChatSer(m);
       return c && c !== chatId;
@@ -877,7 +880,7 @@ const opts = {
       log(`DBG batch order#${batchNo}: first=${msgId(batch[0])}@${msgTs(batch[0])} | last=${msgId(batch[batch.length-1])}@${msgTs(batch[batch.length-1])}`);
     } catch {}
 
-    // ---- CURSOR ROBUSTO: usa SEMPRE il messaggio più vecchio (min timestamp) ----
+    // ---- CURSOR ROBUSTO: usa SEMPRE il messaggio piÃ¹ vecchio (min timestamp) ----
     // Questo evita l'overlap enorme quando WPP ti restituisce array in ordine diverso.
     let cursorMsg = batch[0];
     let cursorTs = msgTs(cursorMsg);
@@ -1150,11 +1153,13 @@ async function downloadAnyMedia(message) {
       }
     } catch {}
 
-    try { if (md?.mediaBlob) md.mediaBlob = null; } catch {}
+    const kind = (message?.type || message?.mediaType || '').toLowerCase();
 
-    // prima controlla se il blob è già disponibile da qualche parte
-    let blob = await getBlobFromMessageCaches(message, id);
-    if (blob) return blob;
+    // Per i video e documenti non fidarsi subito della cache iniziale (spesso e solo la preview/thumbnail di 3 secondi)
+    if (kind !== 'video' && kind !== 'document') {
+      let blob = await getBlobFromMessageCaches(message, id);
+      if (blob) return blob;
+    }
 
     await message.downloadMedia({
       downloadEvenIfExpensive: true,
@@ -1208,7 +1213,7 @@ async function safeDownloadBlob(m, { timeoutMs = 45000, retries = 1 } = {}) {
         `downloadAnyMedia kind=${kind} id=${mid} attempt=${attempt}`
       );
 
-      // blob non valido o vuoto = media non più disponibile / preview / ecc.
+      // blob non valido o vuoto = media non piÃ¹ disponibile / preview / ecc.
       if (!blob || typeof blob.arrayBuffer !== 'function') {
         throw new Error('download returned invalid blob');
       }
@@ -1380,6 +1385,197 @@ async function makeZip(entries) {
 
 
 
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = (e) => reject(e);
+    reader.readAsDataURL(blob);
+  });
+}
+
+function postToN8n(webhookUrl, payload) {
+  return new Promise((resolve) => {
+    const id = Math.random().toString(36).slice(2);
+    const handler = (ev) => {
+      const d = ev.data;
+      if (d && d.__from === 'wamd:content' && d.type === 'wa:n8n_post:ack' && d.id === id) {
+        window.removeEventListener('message', handler);
+        resolve(d.res || { ok: false, error: 'No response' });
+      }
+    };
+    window.addEventListener('message', handler);
+    window.postMessage({ __from: 'wamd:inpage', type: 'wa:n8n_post', id, payload: { webhookUrl, payload } }, '*');
+    setTimeout(() => {
+      window.removeEventListener('message', handler);
+      resolve({ ok: false, error: 'Webhook request timeout (30s)' });
+    }, 30000);
+  });
+}
+
+function getSyncedMessageIds() {
+  try {
+    const arr = JSON.parse(localStorage.getItem('wamd_n8n_synced_ids') || '[]');
+    return new Set(arr);
+  } catch { return new Set(); }
+}
+
+function saveSyncedMessageIds(set) {
+  try {
+    const arr = Array.from(set);
+    const trimmed = arr.length > 10000 ? arr.slice(arr.length - 10000) : arr;
+    localStorage.setItem('wamd_n8n_synced_ids', JSON.stringify(trimmed));
+  } catch {}
+}
+
+async function performN8nSync({ webhookUrl, scope, selectedChatId, batchSize = 5, skipSynced = true, types = [] }) {
+  await ensureReady();
+  const allChats = await listChats();
+  const chatMap = new Map(allChats.map(c => [c.id, c.name]));
+
+  let targetChatIds = [];
+  if (scope === 'all') {
+    targetChatIds = allChats.map(c => c.id);
+  } else {
+    if (!selectedChatId) throw new Error('No selected chat provided for sync');
+    targetChatIds = [selectedChatId];
+  }
+
+  log(`n8n Sync: starting sync for ${targetChatIds.length} chat(s)...`);
+
+  const syncedSet = skipSynced ? getSyncedMessageIds() : new Set();
+  let totalSynced = 0;
+  let totalSkipped = 0;
+  let totalErrors = 0;
+
+  for (let idx = 0; idx < targetChatIds.length; idx++) {
+    const chatId = targetChatIds[idx];
+    const chatName = chatMap.get(chatId) || chatId;
+    log(`[${idx + 1}/${targetChatIds.length}] Fetching messages for: ${chatName}`);
+
+    let rawMsgs = [];
+    try {
+      if (window.WPP?.chat?.getMessages) {
+        rawMsgs = await window.WPP.chat.getMessages(chatId, { count: 3000 });
+      }
+    } catch (e) {
+      log(`Error loading messages for ${chatName}: ${e?.message || e}`);
+    }
+
+    if (!rawMsgs || !rawMsgs.length) {
+      log(`No messages found for ${chatName}`);
+      continue;
+    }
+
+    // Process and filter messages
+    const toProcess = [];
+    for (const m of rawMsgs) {
+      const mid = m?.id?._serialized || m?.id || '';
+      if (!mid) continue;
+
+      if (skipSynced && syncedSet.has(mid)) {
+        totalSkipped++;
+        continue;
+      }
+
+      toProcess.push(m);
+    }
+
+    log(`Found ${toProcess.length} new message(s) to sync for ${chatName}`);
+    if (!toProcess.length) continue;
+
+    // Convert messages to database schema JSON
+    const processedMsgs = [];
+    for (let i = 0; i < toProcess.length; i++) {
+      const m = toProcess[i];
+      const mid = m?.id?._serialized || m?.id || '';
+      const kind = (m.type || m.mediaType || '').toLowerCase();
+      const isMedia = m.isMedia || m.isMMS || !!m.mediaKey || !!m.mediaData ||
+        ['image', 'video', 'ptt', 'audio', 'document', 'sticker'].includes(kind);
+
+      const senderName = await resolveSenderName(m);
+      const senderWid = widToString(m.author || m.sender || m.from || m.id?.participant || m.id?.remote || '');
+      const ts = m.t || m.timestamp || Math.floor(Date.now() / 1000);
+      const textContent = m.body || m.caption || m.text || '';
+
+      let mediaObj = null;
+      if (isMedia) {
+        try {
+          const mediaTimeout = getTimeoutForMedia(m) || 30000;
+          const blob = await safeDownloadBlob(m, { timeoutMs: mediaTimeout, retries: 1 });
+          if (blob) {
+            const dataUrl = await blobToBase64(blob);
+            const mime = blob.type || m.mimetype || 'application/octet-stream';
+            const filename = makeFilename({
+              chatName,
+              senderName,
+              ts,
+              index: i + 1,
+              mime,
+              caption: textContent,
+              naming: { useDate: true, includeSenderName: true, appendOrigNameAll: true },
+              message: m,
+              kind
+            });
+
+            mediaObj = {
+              media_type: kind || 'media',
+              mime_type: mime,
+              file_name: filename,
+              file_size_bytes: blob.size,
+              data_url: dataUrl
+            };
+          }
+        } catch (mediaErr) {
+          log(`Media download warning for ${mid}: ${mediaErr?.message || mediaErr}`);
+        }
+      }
+
+      processedMsgs.push({
+        message_id: mid,
+        chat_id: chatId,
+        chat_name: chatName,
+        sender_id: senderWid,
+        sender_name: senderName,
+        is_from_me: !!(m.fromMe || m.id?.fromMe),
+        timestamp: ts,
+        datetime: new Date(ts * 1000).toISOString(),
+        text: textContent,
+        has_media: !!mediaObj,
+        media: mediaObj
+      });
+    }
+
+    // Send in batches of size batchSize
+    const currentBatchSize = Math.max(1, batchSize);
+    for (let b = 0; b < processedMsgs.length; b += currentBatchSize) {
+      const chunk = processedMsgs.slice(b, b + currentBatchSize);
+      const payload = {
+        event: 'wa_chat_sync',
+        chat_id: chatId,
+        chat_name: chatName,
+        batch_count: chunk.length,
+        messages: chunk
+      };
+
+      const res = await postToN8n(webhookUrl, payload);
+      if (res && res.ok) {
+        for (const item of chunk) {
+          syncedSet.add(item.message_id);
+        }
+        saveSyncedMessageIds(syncedSet);
+        totalSynced += chunk.length;
+        log(`Synced batch ${Math.floor(b / currentBatchSize) + 1}/${Math.ceil(processedMsgs.length / currentBatchSize)} (${chunk.length} msgs) to n8n`);
+      } else {
+        totalErrors += chunk.length;
+        log(`⚠️ Failed to push batch to n8n: ${res?.error || 'Unknown error'}`);
+      }
+    }
+  }
+
+  return { syncedCount: totalSynced, skippedCount: totalSkipped, errors: totalErrors, scope };
+}
+
 async function downloadMessages({ chatId, chatsFriendlyMap, types, from, to, naming, pack }) {
   await ensureReady();
 
@@ -1410,12 +1606,18 @@ maxBatches: pack?.deepScan ? 200 : 80
     return { count: 0 };
   }
   
-// Pro Mode: Unlimited downloads (no 25 file cap)
-const isProUser = true;
-const cap = Infinity;
+// FREE cap â€” robusto: non fidarsi solo dello slice iniziale.
+// Il limite viene applicato anche dentro il loop ZIP/non-ZIP contando i file salvati.
+const isProUser = pack?.pro === true;
+const cap = (!isProUser && Number.isFinite(Number(pack?.freeCap)) && Number(pack.freeCap) > 0)
+  ? Number(pack.freeCap)
+  : (isProUser ? Infinity : 25);
 
 let work = msgs;
 let capped = false;
+if (!isProUser) {
+  log(`FREE: max ${cap} files per download (media found: ${msgs.length})`);
+}
 
   const chatName = chatsFriendlyMap.get(chatId) || 'Chat';
   let idx = 0;
@@ -1437,7 +1639,7 @@ let capped = false;
       log(`zip collect #${idx}: id=${mid}, kind=${kind}, ts=${ts}`);
       
       
-// DEBUG: stampa solo per quelli “problematici” (consigliato)
+// DEBUG: stampa solo per quelli â€œproblematiciâ€ (consigliato)
 
 /*  
 console.log({
@@ -1664,6 +1866,26 @@ window.addEventListener('message', async (ev) => {
   );
   return;
 }
+
+      if (cmd === 'syncToN8n') {
+        const { webhookUrl, scope, selectedChatId, batchSize, skipSynced, types } = payload || {};
+        const res = await performN8nSync({ webhookUrl, scope, selectedChatId, batchSize, skipSynced, types });
+        window.postMessage(
+          { __from: 'wamd:inpage', type: 'inpage:resp', cmd, payload: res },
+          '*'
+        );
+        return;
+      }
+
+      if (cmd === 'resetSyncCache') {
+        try {
+          localStorage.removeItem('wamd_n8n_synced_ids');
+          window.postMessage({ __from: 'wamd:inpage', type: 'inpage:resp', cmd, payload: { ok: true } }, '*');
+        } catch (e) {
+          window.postMessage({ __from: 'wamd:inpage', type: 'inpage:error', cmd, error: String(e) }, '*');
+        }
+        return;
+      }
 
 
       // cmd sconosciuto

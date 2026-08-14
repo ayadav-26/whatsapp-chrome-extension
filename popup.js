@@ -1,1004 +1,625 @@
-/**
- * WhatsApp Web Message Monitor & Sender - Popup Controller
- * Manages Monitor dashboard, Automatic Sender form, File Attachment picker, and Progress banners.
- */
-
-document.addEventListener("DOMContentLoaded", () => {
-
-  // ═══════════════════════════════════════════════════════
-  //  JS TOOLTIP ENGINE
-  //  Uses position:fixed + viewport clamping so the tooltip
-  //  is NEVER clipped by the popup window edge.
-  // ═══════════════════════════════════════════════════════
-  const waTooltip = document.getElementById("wa-tooltip");
-  let ttHideTimer = null;
-  const GAP = 8;       // pixels between trigger and tooltip
-  const MARGIN = 6;    // min distance from popup edge
-
-  function positionAndShow(trigger) {
-    if (!waTooltip) return;
-    const text = trigger.getAttribute("data-tooltip");
-    if (!text) return;
-
-    clearTimeout(ttHideTimer);
-    waTooltip.textContent = text;
-    waTooltip.classList.remove("visible", "arrow-up", "arrow-down");
-
-    // Temporarily make it invisible but measurable
-    waTooltip.style.visibility = "hidden";
-    waTooltip.style.display = "block";
-
-    const rect  = trigger.getBoundingClientRect();
-    const ttW   = waTooltip.offsetWidth;
-    const ttH   = waTooltip.offsetHeight;
-    const vpW   = document.documentElement.clientWidth;
-    const vpH   = document.documentElement.clientHeight;
-
-    // Try to place BELOW the trigger first
-    let top  = rect.bottom + GAP;
-    let arrowClass = "arrow-up";
-
-    // If it would overflow the bottom, place ABOVE
-    if (top + ttH + MARGIN > vpH) {
-      top = rect.top - ttH - GAP;
-      arrowClass = "arrow-down";
-    }
-
-    // Horizontally: center on trigger, then clamp
-    let left = rect.left + rect.width / 2 - ttW / 2;
-    if (left < MARGIN)              left = MARGIN;
-    if (left + ttW > vpW - MARGIN)  left = vpW - ttW - MARGIN;
-
-    waTooltip.style.top  = Math.round(top)  + "px";
-    waTooltip.style.left = Math.round(left) + "px";
-    waTooltip.classList.add(arrowClass);
-
-    waTooltip.style.visibility = "";
-    // small rAF so transition fires
-    requestAnimationFrame(() => waTooltip.classList.add("visible"));
-  }
-
-  function hideTooltip() {
-    if (!waTooltip) return;
-    waTooltip.classList.remove("visible");
-    ttHideTimer = setTimeout(() => {
-      waTooltip.style.display = "none";
-    }, 160);
-  }
-
-  // Attach to every element that carries a data-tooltip attribute
-  document.querySelectorAll("[data-tooltip]").forEach(el => {
-    el.addEventListener("mouseenter", () => positionAndShow(el));
-    el.addEventListener("mouseleave",  hideTooltip);
-    el.addEventListener("click",       hideTooltip);
-    el.addEventListener("focus",       () => positionAndShow(el));
-    el.addEventListener("blur",        hideTooltip);
-  });
-  // ═══════════════════════════════════════════════════════
-
-  // Tab elements
-  // Tab elements
-  const tabMonitorBtn = document.getElementById("tabMonitorBtn");
-  const tabDownloaderBtn = document.getElementById("tabDownloaderBtn");
-  const tabSendBtn = document.getElementById("tabSendBtn");
-  const tabSyncBtn = document.getElementById("tabSyncBtn");
-  const viewMonitor = document.getElementById("viewMonitor");
-  const viewDownloader = document.getElementById("viewDownloader");
-  const viewSend = document.getElementById("viewSend");
-  const viewSync = document.getElementById("viewSync");
-
-  // Media Downloader Elements
-  const dlScannedCountEl = document.getElementById("dlScannedCount");
-  const dlSelectedCountEl = document.getElementById("dlSelectedCount");
-  const dlClosedBanner = document.getElementById("dlClosedBanner");
-  const dlFilterImg = document.getElementById("dlFilterImg");
-  const dlFilterVid = document.getElementById("dlFilterVid");
-  const dlFilterAud = document.getElementById("dlFilterAud");
-  const dlFilterDoc = document.getElementById("dlFilterDoc");
-  const dlStartDate = document.getElementById("dlStartDate");
-  const dlEndDate = document.getElementById("dlEndDate");
-  const dlTargetChat = document.getElementById("dlTargetChat");
-  const dlFilenameTpl = document.getElementById("dlFilenameTpl");
-  const dlDeepScanToggle = document.getElementById("dlDeepScanToggle");
-  const dlProgressCard = document.getElementById("dlProgressCard");
-  const dlProgressStatus = document.getElementById("dlProgressStatus");
-  const dlProgressPercent = document.getElementById("dlProgressPercent");
-  const dlProgressFill = document.getElementById("dlProgressFill");
-  const dlScanBtn = document.getElementById("dlScanBtn");
-  const dlZipBtn = document.getElementById("dlZipBtn");
-  const dlStatusBtn = document.getElementById("dlStatusBtn");
-  const dlEmptyState = document.getElementById("dlEmptyState");
-  const dlGalleryGrid = document.getElementById("dlGalleryGrid");
-
-  let scannedMediaItems = [];
-
-  // Sync elements
-  const webhookUrlInput = document.getElementById("webhookUrlInput");
-  const syncEnableToggle = document.getElementById("syncEnableToggle");
-  const saveSyncSettingsBtn = document.getElementById("saveSyncSettingsBtn");
-  const syncActiveNowBtn = document.getElementById("syncActiveNowBtn");
-  const syncFeedbackBanner = document.getElementById("syncFeedbackBanner");
-  const syncFeedbackText = document.getElementById("syncFeedbackText");
-  const syncedChatsValEl = document.getElementById("syncedChatsVal");
-  const syncedMsgsValEl = document.getElementById("syncedMsgsVal");
-
-  // Dashboard elements
-  const totalCountEl = document.getElementById("totalCount");
-  const lastTimeValEl = document.getElementById("lastTimeVal");
-  const emptyStateEl = document.getElementById("emptyState");
-  const messageDetailsEl = document.getElementById("messageDetails");
-  const directionBadgeEl = document.getElementById("directionBadge");
-  const typeValEl = document.getElementById("typeVal");
-  const senderValEl = document.getElementById("senderVal");
-  const chatValEl = document.getElementById("chatVal");
-  const phoneValEl = document.getElementById("phoneVal");
-  const msgValEl = document.getElementById("msgVal");
-  const attachmentMetaRowEl = document.getElementById("attachmentMetaRow");
-  const attachmentMetaValEl = document.getElementById("attachmentMetaVal");
-  const statusTextEl = document.getElementById("statusText");
-  const clearBtn = document.getElementById("clearBtn");
-
-  // Form elements
-  const sendForm = document.getElementById("sendForm");
-  const countryCodeInput = document.getElementById("countryCode");
-  const phoneNumberInput = document.getElementById("phoneNumber");
-  const messageTextInput = document.getElementById("messageText");
-  const attachmentPicker = document.getElementById("attachmentPicker");
-  const dropArea = document.getElementById("dropArea");
-  const filePreviewCard = document.getElementById("filePreviewCard");
-  const fileNameVal = document.getElementById("fileNameVal");
-  const fileSizeVal = document.getElementById("fileSizeVal");
-  const removeFileBtn = document.getElementById("removeFileBtn");
-  const submitSendBtn = document.getElementById("submitSendBtn");
-  const progressBanner = document.getElementById("progressBanner");
-  const progressText = document.getElementById("progressText");
-
-  // Attachment state
-  let selectedAttachment = null;
-
-  // Helper to hide all view panels
-  function hideAllViews() {
-    viewMonitor.classList.add("hidden");
-    if (viewDownloader) viewDownloader.classList.add("hidden");
-    viewSend.classList.add("hidden");
-    if (viewSync) viewSync.classList.add("hidden");
-
-    tabMonitorBtn.classList.remove("active");
-    if (tabDownloaderBtn) tabDownloaderBtn.classList.remove("active");
-    tabSendBtn.classList.remove("active");
-    if (tabSyncBtn) tabSyncBtn.classList.remove("active");
-  }
-
-  // 1. Tab Navigation
-  tabMonitorBtn.addEventListener("click", () => {
-    hideAllViews();
-    tabMonitorBtn.classList.add("active");
-    viewMonitor.classList.remove("hidden");
-  });
-
-  if (tabDownloaderBtn) {
-    tabDownloaderBtn.addEventListener("click", () => {
-      hideAllViews();
-      tabDownloaderBtn.classList.add("active");
-      viewDownloader.classList.remove("hidden");
-      populateTargetChats();
-      if (scannedMediaItems.length === 0) {
-        scanActiveChatMedia();
-      }
-    });
-  }
-
-  tabSendBtn.addEventListener("click", () => {
-    hideAllViews();
-    tabSendBtn.classList.add("active");
-    viewSend.classList.remove("hidden");
-  });
-
-  if (tabSyncBtn) {
-    tabSyncBtn.addEventListener("click", () => {
-      hideAllViews();
-      tabSyncBtn.classList.add("active");
-      if (viewSync) viewSync.classList.remove("hidden");
-      refreshSyncStats();
-    });
-  }
-
-
-  // Load Sync Settings
-  function loadSyncSettings() {
-    if (typeof chrome === "undefined" || !chrome.storage || !chrome.storage.local) return;
-
-    chrome.storage.local.get(["whatsapp_sync_webhook_url", "whatsapp_sync_enabled", "whatsapp_synced_chats", "whatsapp_synced_messages"], (res) => {
-      let savedUrl = res.whatsapp_sync_webhook_url;
-      if (!savedUrl || savedUrl.includes("localhost")) {
-        savedUrl = "https://ai-workflow.smartsight.in/webhook/whatsapp-sync";
-      }
-      if (webhookUrlInput) webhookUrlInput.value = savedUrl;
-      if (syncEnableToggle) syncEnableToggle.checked = res.whatsapp_sync_enabled !== undefined ? res.whatsapp_sync_enabled : true;
-
-      // Only show sync counts when WA Web is confirmed open
-      // (waWebIsOpen is set by the tab check at the bottom)
-      // We still read the values but only render them after the WA check runs
-      const syncedChats = res.whatsapp_synced_chats || {};
-      const syncedMsgs  = res.whatsapp_synced_messages || {};
-
-      // Store in module-level vars so updateSyncCounts() can use them
-      _syncedChatsCount = Object.keys(syncedChats).length;
-      _syncedMsgsCount  = Object.keys(syncedMsgs).length;
-
-      updateSyncCounts();
-    });
-  }
-
-  // Cached sync counts (set by loadSyncSettings, rendered by updateSyncCounts)
-  let _syncedChatsCount = 0;
-  let _syncedMsgsCount  = 0;
-
-  function updateSyncCounts() {
-    if (waWebIsOpen) {
-      // Show real counts
-      if (syncedChatsValEl) syncedChatsValEl.textContent = _syncedChatsCount;
-      if (syncedMsgsValEl)  syncedMsgsValEl.textContent  = _syncedMsgsCount;
-    } else {
-      // WA Web not open — show 0 to avoid misleading numbers
-      if (syncedChatsValEl) syncedChatsValEl.textContent = 0;
-      if (syncedMsgsValEl)  syncedMsgsValEl.textContent  = 0;
-    }
-  }
-
-  function refreshSyncStats() {
-    loadSyncSettings();
-  }
-
-  // Save Sync Settings
-  if (saveSyncSettingsBtn) {
-    saveSyncSettingsBtn.addEventListener("click", () => {
-      const webhookUrl = webhookUrlInput ? webhookUrlInput.value.trim() : "";
-      const syncEnabled = syncEnableToggle ? syncEnableToggle.checked : true;
-
-      if (!webhookUrl) {
-        alert("Please enter a valid n8n Webhook URL.");
-        return;
-      }
-
-      chrome.storage.local.set({
-        whatsapp_sync_webhook_url: webhookUrl,
-        whatsapp_sync_enabled: syncEnabled
-      }, () => {
-        if (syncFeedbackBanner) {
-          syncFeedbackBanner.className = "progress-banner";
-          syncFeedbackBanner.classList.remove("hidden");
-          if (syncFeedbackText) syncFeedbackText.textContent = "Sync settings saved successfully!";
-          setTimeout(() => syncFeedbackBanner.classList.add("hidden"), 3000);
-        }
-      });
-    });
-  }
-
-  // Sync Active Chat Now Button Handler
-  if (syncActiveNowBtn) {
-    syncActiveNowBtn.addEventListener("click", () => {
-      syncActiveNowBtn.disabled = true;
-      if (syncFeedbackBanner) {
-        syncFeedbackBanner.className = "progress-banner";
-        syncFeedbackBanner.classList.remove("hidden");
-        if (syncFeedbackText) syncFeedbackText.textContent = "Initiating active chat sync...";
-      }
-
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs && tabs[0] && tabs[0].url && tabs[0].url.includes("web.whatsapp.com")) {
-          chrome.tabs.sendMessage(tabs[0].id, { action: "SYNC_ACTIVE_CHAT" }, (response) => {
-            syncActiveNowBtn.disabled = false;
-            if (chrome.runtime.lastError || !response || !response.success) {
-              if (syncFeedbackBanner) {
-                syncFeedbackBanner.className = "progress-banner progress-error";
-                if (syncFeedbackText) syncFeedbackText.textContent = response?.error || "Failed to trigger sync. Make sure WhatsApp Web is loaded.";
-              }
-            } else {
-              if (syncFeedbackBanner) {
-                syncFeedbackBanner.className = "progress-banner";
-                if (syncFeedbackText) syncFeedbackText.textContent = response.message || "Active chat synchronized successfully!";
-                setTimeout(() => {
-                  refreshSyncStats();
-                  syncFeedbackBanner.classList.add("hidden");
-                }, 3000);
-              }
-            }
-          });
-        } else {
-          syncActiveNowBtn.disabled = false;
-          if (syncFeedbackBanner) {
-            syncFeedbackBanner.className = "progress-banner progress-error";
-            if (syncFeedbackText) syncFeedbackText.textContent = "Please open WhatsApp Web tab to sync active conversation.";
-          }
-        }
-      });
-    });
-  }
-
-  loadSyncSettings();
-
-  // 2. Refreshes Dashboard UI from storage
-  function refreshDashboard() {
-    if (typeof chrome === "undefined" || !chrome.storage || !chrome.storage.local) return;
-
-    chrome.storage.local.get(["whatsapp_messages", "totalCaptured", "lastCapturedMessage"], (res) => {
-      const messages = res.whatsapp_messages || [];
-      const total = res.totalCaptured !== undefined ? res.totalCaptured : messages.length;
-
-      totalCountEl.textContent = total;
-
-      const lastMsg = res.lastCapturedMessage || (messages.length > 0 ? messages[messages.length - 1] : null);
-      const lastTimeDisplayEl = document.getElementById("lastTimeDisplay");
-
-      if (lastMsg) {
-        emptyStateEl.classList.add("hidden");
-        messageDetailsEl.classList.remove("hidden");
-
-        const isIncoming = lastMsg.direction === "INCOMING";
-        directionBadgeEl.textContent = lastMsg.direction || "INCOMING";
-        directionBadgeEl.className = `badge ${isIncoming ? "badge-incoming" : "badge-outgoing"}`;
-
-        typeValEl.textContent = lastMsg.messageType || "TEXT";
-        senderValEl.textContent = isIncoming ? (lastMsg.senderName || "Unknown") : `Me ➔ ${lastMsg.receiverName || lastMsg.chatName}`;
-        chatValEl.textContent = lastMsg.chatName || "Unknown";
-        phoneValEl.textContent = lastMsg.phoneNumber || "Not Available";
-        msgValEl.textContent = lastMsg.message || "";
-        lastTimeValEl.textContent = lastMsg.timestamp || "--:--";
-        if (lastTimeDisplayEl) lastTimeDisplayEl.textContent = lastMsg.timestamp || "";
-
-        if (lastMsg.attachment) {
-          attachmentMetaRowEl.classList.remove("hidden");
-          const sizeStr = lastMsg.attachment.size ? ` (${window.WAMonitor?.Helpers?.formatFileSize(lastMsg.attachment.size)})` : "";
-          const fileName = lastMsg.attachment.fileName || "Media Attachment";
-
-          if (lastMsg.attachment.mediaUrl) {
-            attachmentMetaValEl.innerHTML = `<a href="${lastMsg.attachment.mediaUrl}" target="_blank" style="color:var(--accent,#00c896);text-decoration:none;display:inline-flex;align-items:center;gap:5px;">🔗 ${fileName}${sizeStr}</a>`;
-          } else {
-            attachmentMetaValEl.textContent = `📎 ${fileName}${sizeStr}`;
-          }
-        } else {
-          attachmentMetaRowEl.classList.add("hidden");
-        }
-      } else {
-        emptyStateEl.classList.remove("hidden");
-        messageDetailsEl.classList.add("hidden");
-        lastTimeValEl.textContent = "--:--";
-        if (lastTimeDisplayEl) lastTimeDisplayEl.textContent = "";
-      }
-    });
-  }
-
-  // 3. Monitor active send task progress banner
-  function checkSendTaskProgress() {
-    if (typeof chrome === "undefined" || !chrome.storage || !chrome.storage.local) return;
-
-    chrome.storage.local.get(["active_send_task"], (res) => {
-      const task = res.active_send_task;
-      if (!task) {
-        progressBanner.classList.add("hidden");
-        submitSendBtn.disabled = false;
-        return;
-      }
-
-      const createdTime = new Date(task.createdAt || Date.now()).getTime();
-      const isStale = Date.now() - createdTime > 25000; // Auto-expire task if older than 25 seconds
-
-      if (task.completed || task.error || isStale) {
-        if (task.error) {
-          progressBanner.className = "progress-banner progress-error";
-          progressBanner.classList.remove("hidden");
-          progressText.textContent = task.status || "Failed to send message.";
-        } else {
-          progressBanner.classList.add("hidden");
-        }
-        submitSendBtn.disabled = false;
-      } else {
-        progressBanner.classList.remove("hidden");
-        progressBanner.className = "progress-banner";
-        progressText.textContent = task.status || "Processing...";
-        submitSendBtn.disabled = true;
-      }
-    });
-  }
-
-  // Initial loads
-  refreshDashboard();
-  checkSendTaskProgress();
-
-  // Listen for storage updates
-  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged) {
-    chrome.storage.onChanged.addListener((changes) => {
-      if (changes.whatsapp_messages || changes.totalCaptured || changes.lastCapturedMessage) {
-        refreshDashboard();
-      }
-      if (changes.active_send_task) {
-        checkSendTaskProgress();
-      }
-    });
-  }
-
-  // 4. File Attachment Picker Handler
-  attachmentPicker.addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    // Check File Size (Max 100MB)
-    const MAX_SIZE = 104857600;
-    if (file.size > MAX_SIZE) {
-      alert(`File size (${(file.size / 1048576).toFixed(1)}MB) exceeds maximum limit of 100MB.`);
-      attachmentPicker.value = "";
-      return;
-    }
-
-    const H = window.WAMonitor?.Helpers;
-    const formattedSize = H ? H.formatFileSize(file.size) : `${(file.size / 1024).toFixed(1)} KB`;
-
-    fileNameVal.textContent = file.name;
-    fileSizeVal.textContent = formattedSize;
-
-    // Read File as Base64 DataURL
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      selectedAttachment = {
-        fileName: file.name,
-        fileType: file.type || "application/octet-stream",
-        size: file.size,
-        base64Data: evt.target.result
-      };
-
-      dropArea.classList.add("hidden");
-      filePreviewCard.classList.remove("hidden");
-    };
-    reader.readAsDataURL(file);
-  });
-
-  // Remove File Button Handler
-  removeFileBtn.addEventListener("click", () => {
-    selectedAttachment = null;
-    attachmentPicker.value = "";
-    filePreviewCard.classList.add("hidden");
-    dropArea.classList.remove("hidden");
-  });
-
-  // 5. Form Submit Handler
-  sendForm.addEventListener("submit", (e) => {
-    e.preventDefault();
-
-    let countryCode = countryCodeInput.value.trim();
-    let phoneNumber = phoneNumberInput.value.trim();
-    let messageText = messageTextInput.value;
-
-    const cleanCountry = countryCode.replace(/\D/g, "");
-    const cleanPhone = phoneNumber.replace(/\D/g, "");
-
-    if (!cleanCountry) {
-      alert("Please enter a valid Country Code (e.g. +91).");
-      return;
-    }
-    if (!cleanPhone) {
-      alert("Please enter a valid Phone Number.");
-      return;
-    }
-
-    if ((!messageText || messageText.trim() === "") && !selectedAttachment) {
-      alert("Please enter a message or select an attachment file.");
-      return;
-    }
-
-    submitSendBtn.disabled = true;
-    progressBanner.className = "progress-banner";
-    progressBanner.classList.remove("hidden");
-    progressText.textContent = "Opening WhatsApp...";
-
-    chrome.runtime.sendMessage({
-      action: "INITIATE_SEND",
-      payload: {
-        countryCode: `+${cleanCountry}`,
-        phoneNumber: cleanPhone,
-        message: messageText,
-        attachment: selectedAttachment
-      }
-    }, (response) => {
-      if (chrome.runtime.lastError || !response || !response.success) {
-        progressBanner.className = "progress-banner progress-error";
-        progressText.textContent = response?.error || "Failed to initiate tab navigation.";
-        submitSendBtn.disabled = false;
-      } else {
-        progressText.textContent = response.message || "Opening WhatsApp Chat...";
-      }
-    });
-  });
-
-  // Clear Storage Action
-  if (clearBtn) {
-    clearBtn.addEventListener("click", () => {
-      if (confirm("Are you sure you want to clear stored message history?")) {
-        chrome.storage.local.remove(["whatsapp_messages", "totalCaptured", "lastCapturedMessage", "active_send_task"], () => {
-          refreshDashboard();
-          progressBanner.classList.add("hidden");
-          submitSendBtn.disabled = false;
-        });
-      }
-    });
-  }
-
-  /**
-   * Safely dispatches a message to a Chrome tab, capturing chrome.runtime.lastError cleanly
-   * to eliminate unhandled promise rejections ("Could not establish connection").
-   */
-  function safeSendTabMessage(tabId, message, callback) {
-    if (typeof chrome === "undefined" || !chrome.tabs || !tabId) {
-      if (typeof callback === "function") callback(null, { message: "Chrome tabs API unavailable" });
-      return;
-    }
-    try {
-      chrome.tabs.sendMessage(tabId, message, (response) => {
-        const err = chrome.runtime.lastError;
-        if (err) {
-          if (typeof callback === "function") callback(null, err);
-        } else {
-          if (typeof callback === "function") callback(response, null);
-        }
-      });
-    } catch (e) {
-      if (typeof callback === "function") callback(null, e);
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════
-  //  MEDIA DOWNLOADER PRO ENGINE HANDLERS (WPPConnect + Inpage App Bridge)
-  // ═══════════════════════════════════════════════════════
-
-  async function runInMain(tabId, func, ...args) {
-    if (!chrome.scripting) return null;
-    const [{ result }] = await chrome.scripting.executeScript({
-      target: { tabId },
-      func,
-      args,
-      world: 'MAIN'
-    });
-    return result;
-  }
-
-  async function injectFile(tabId, file) {
-    if (!chrome.scripting) return;
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files: [file],
-      world: 'MAIN'
-    });
-  }
-
-  async function ensureInjected(tabId) {
-    const hasWpp = await runInMain(tabId, () => !!window.WPP).catch(() => false);
-    if (!hasWpp) {
-      await injectFile(tabId, 'lib/wppconnect-wa-wrapped.js').catch((e) => console.warn('Vendor inject:', e.message));
-    }
-
-    const appLoaded = await runInMain(tabId, () => !!window.__WAMD_APP_LOADED__).catch(() => false);
-    if (!appLoaded) {
-      await injectFile(tabId, 'inpage/app.js').catch((e) => console.warn('App inject:', e.message));
-    }
-  }
-
-  async function sendToPage(cmd, payload) {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab || !tab.id || !tab.url || !tab.url.includes("web.whatsapp.com")) {
-      throw new Error("Please open WhatsApp Web tab");
-    }
-
-    await ensureInjected(tab.id);
-
-    return new Promise((resolve, reject) => {
-      const handler = (msg) => {
-        if (msg?.__from === 'wamd:content') {
-          const p = msg.payload;
-          if (p?.type === 'inpage:resp' && p?.cmd === cmd) {
-            chrome.runtime.onMessage.removeListener(handler);
-            resolve(p.payload);
-          } else if (p?.type === 'inpage:error' && p?.cmd === cmd) {
-            chrome.runtime.onMessage.removeListener(handler);
-            reject(new Error(p.error || "Execution error"));
-          }
-        }
-      };
-
-      chrome.runtime.onMessage.addListener(handler);
-
-      setTimeout(() => {
-        chrome.runtime.onMessage.removeListener(handler);
-        reject(new Error(`Timeout waiting for command ${cmd}`));
-      }, 60000);
-
-      chrome.tabs.sendMessage(tab.id, {
-        __to: 'wamd:content',
-        payload: { __from: 'wamd:inpage', type: 'popup:cmd', cmd, payload }
-      });
-    });
-  }
-
-  function getSelectedCategories() {
-    const cats = [];
-    if (dlFilterImg && dlFilterImg.checked) cats.push("IMAGE");
-    if (dlFilterVid && dlFilterVid.checked) cats.push("VIDEO");
-    if (dlFilterAud && dlFilterAud.checked) cats.push("AUDIO");
-    if (dlFilterDoc && dlFilterDoc.checked) cats.push("DOCUMENT");
-    return cats;
-  }
-
-  async function populateTargetChats() {
-    if (!chrome.tabs || !dlTargetChat) return;
-    const loader = document.getElementById("contactLoader");
-    try {
-      if (loader) loader.classList.remove("hidden");
-      const currentVal = dlTargetChat.value || "ACTIVE";
-      if (!dlTargetChat.options || dlTargetChat.options.length <= 2) {
-        dlTargetChat.innerHTML = `
-          <option value="LOADING" disabled selected>⏳ Fetching contacts from WhatsApp Web...</option>
-          <option value="ACTIVE">Currently Active Chat (Default)</option>
-          <option value="ALL">All Available Chats (Bulk)</option>
-        `;
-      }
-
-      const chatList = await sendToPage('listChats').catch(() => []);
-      if (Array.isArray(chatList) && chatList.length > 0) {
-        dlTargetChat.innerHTML = `
-          <option value="ACTIVE">Currently Active Chat (Default)</option>
-          <option value="ALL">All Available Chats (Bulk)</option>
-        `;
-        chatList.forEach((c) => {
-          const opt = document.createElement("option");
-          opt.value = c.id;
-          opt.textContent = `Contact: ${c.name || c.id}`;
-          dlTargetChat.appendChild(opt);
-        });
-        dlTargetChat.value = currentVal === "LOADING" ? "ACTIVE" : currentVal;
-      } else {
-        dlTargetChat.innerHTML = `
-          <option value="ACTIVE">Currently Active Chat (Default)</option>
-          <option value="ALL">All Available Chats (Bulk)</option>
-        `;
-      }
-    } catch (_) {
-      dlTargetChat.innerHTML = `
-        <option value="ACTIVE">Currently Active Chat (Default)</option>
-        <option value="ALL">All Available Chats (Bulk)</option>
-      `;
-    } finally {
-      if (loader) loader.classList.add("hidden");
-    }
-  }
-
-  async function scanActiveChatMedia(bypassDeepScan = false) {
-    if (!chrome.tabs) return;
-
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab || !tab.url || !tab.url.includes("web.whatsapp.com")) {
-        if (dlClosedBanner) dlClosedBanner.classList.remove("hidden");
-        return;
-      }
-      if (dlClosedBanner) dlClosedBanner.classList.add("hidden");
-
-      if (dlProgressCard) dlProgressCard.classList.remove("hidden");
-      if (dlProgressStatus) dlProgressStatus.textContent = "Connecting to WhatsApp Web...";
-      if (dlProgressPercent) dlProgressPercent.textContent = "0%";
-      if (dlProgressFill) dlProgressFill.style.width = "0%";
-
-      const isDeepScan = (bypassDeepScan !== true) && dlDeepScanToggle && dlDeepScanToggle.checked;
-
-      // 1. Get Chat List to find active/selected chat
-      const chatList = await sendToPage('listChats').catch(() => []);
-      const selectedChat = dlTargetChat ? dlTargetChat.value : "ACTIVE";
-
-      let targetChatId = "";
-      if (selectedChat === "ACTIVE" || !selectedChat) {
-        targetChatId = chatList[0]?.id || "";
-      } else {
-        const found = chatList.find(c => c.name === selectedChat || c.id === selectedChat);
-        targetChatId = found ? found.id : selectedChat;
-      }
-
-      // Populate chat dropdown if empty
-      if (dlTargetChat && chatList.length > 0) {
-        const currentVal = dlTargetChat.value || "ACTIVE";
-        dlTargetChat.innerHTML = `
-          <option value="ACTIVE">Currently Active Chat (Default)</option>
-          <option value="ALL">All Available Chats (Bulk)</option>
-        `;
-        chatList.forEach((c) => {
-          const opt = document.createElement("option");
-          opt.value = c.id;
-          opt.textContent = `Contact: ${c.name || c.id}`;
-          dlTargetChat.appendChild(opt);
-        });
-        dlTargetChat.value = currentVal;
-      }
-
-      // 2. Perform Deep Scan / Load More if toggled
-      if (isDeepScan && targetChatId) {
-        if (dlProgressStatus) dlProgressStatus.textContent = "Loading chat history (Deep Scan)...";
-        for (let i = 1; i <= 5; i++) {
-          if (dlProgressStatus) dlProgressStatus.textContent = `[${i}/5] Loading more messages...`;
-          if (dlProgressPercent) dlProgressPercent.textContent = `${i * 15}%`;
-          if (dlProgressFill) dlProgressFill.style.width = `${i * 15}%`;
-          await sendToPage('loadMore', { selectedChatId: targetChatId }).catch(() => {});
-        }
-      }
-
-      // 3. Get Stats & Media Items
-      if (dlProgressStatus) dlProgressStatus.textContent = "Fetching chat media items...";
-      const stats = await sendToPage('getStats', { selectedChatId: targetChatId }).catch(() => null);
-
-      // Fallback: also request SCAN_CHAT_MEDIA from DOM/store hybrid
-      safeSendTabMessage(tab.id, { action: "SCAN_CHAT_MEDIA", filters: { categories: getSelectedCategories() } }, (res, err) => {
-        scannedMediaItems = res?.mediaItems || [];
-        renderMediaGallery(scannedMediaItems);
-        if (dlProgressCard) {
-          setTimeout(() => dlProgressCard.classList.add("hidden"), 1000);
-        }
-      });
-    } catch (e) {
-      console.warn("[WA Downloader] Scan error:", e);
-      if (dlProgressStatus) dlProgressStatus.textContent = e.message || "Error scanning chat.";
-      setTimeout(() => dlProgressCard.classList.add("hidden"), 2500);
-    }
-  }
-
-  function renderMediaGallery(items) {
-    if (dlScannedCountEl) dlScannedCountEl.textContent = items.length;
-    if (dlSelectedCountEl) dlSelectedCountEl.textContent = items.length;
-
-    if (!items || items.length === 0) {
-      if (dlEmptyState) dlEmptyState.classList.remove("hidden");
-      if (dlGalleryGrid) dlGalleryGrid.classList.add("hidden");
-      return;
-    }
-
-    if (dlEmptyState) dlEmptyState.classList.add("hidden");
-    if (dlGalleryGrid) {
-      dlGalleryGrid.classList.remove("hidden");
-      dlGalleryGrid.innerHTML = "";
-
-      items.forEach((item, index) => {
-        const card = document.createElement("div");
-        card.className = "media-card-item";
-
-        let badgeClass = "badge-doc";
-        let iconSvg = `📄`;
-        if (item.mediaCategory === "IMAGE") { badgeClass = "badge-img"; iconSvg = "📷"; }
-        else if (item.mediaCategory === "VIDEO") { badgeClass = "badge-vid"; iconSvg = "📹"; }
-        else if (item.mediaCategory === "AUDIO") { badgeClass = "badge-aud"; iconSvg = "🎵"; }
-
-        let thumbHtml = `<span style="font-size:24px;">${iconSvg}</span>`;
-        if (item.thumbUrl || (item.mediaCategory === "IMAGE" && item.mediaUrl)) {
-          thumbHtml = `<img src="${item.thumbUrl || item.mediaUrl}" alt="preview">`;
-        }
-
-        card.innerHTML = `
-          <div class="media-thumb-box">${thumbHtml}</div>
-          <div class="media-item-info">
-            <span class="media-badge ${badgeClass}">${item.mediaCategory}</span>
-            <span class="media-item-name" title="${item.fileName}">${item.fileName}</span>
-            <span class="media-item-sub">${item.senderName} • ${item.timestamp || "Today"}</span>
-          </div>
-          <button class="btn-card-download" data-index="${index}">⬇️ Save File</button>
-        `;
-
-        const saveBtn = card.querySelector(".btn-card-download");
-        saveBtn.onclick = () => {
-          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            if (tabs && tabs[0]) {
-              const tpl = dlFilenameTpl ? dlFilenameTpl.value : "";
-              safeSendTabMessage(tabs[0].id, {
-                action: "DOWNLOAD_MEDIA_ZIP",
-                mediaItems: [item],
-                options: { filenameTemplate: tpl, zipName: `${item.fileName}.zip` }
-              }, (res, err) => {
-                if (err) {
-                  alert("Could not communicate with WhatsApp Web. Please refresh the WhatsApp Web tab (F5).");
-                }
-              });
-            }
-          });
-        };
-
-        dlGalleryGrid.appendChild(card);
-      });
-    }
-  }
-
-  async function startZipDownload() {
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab || !tab.url || !tab.url.includes("web.whatsapp.com")) {
-        alert("Please switch to WhatsApp Web tab.");
-        return;
-      }
-
-      if (dlProgressCard) dlProgressCard.classList.remove("hidden");
-      if (dlProgressStatus) dlProgressStatus.textContent = "Downloading & Encoding ZIP archive...";
-      if (dlProgressPercent) dlProgressPercent.textContent = "10%";
-      if (dlProgressFill) dlProgressFill.style.width = "10%";
-
-      const chatList = await sendToPage('listChats').catch(() => []);
-      const selectedChat = dlTargetChat ? dlTargetChat.value : "ACTIVE";
-
-      let targetChatId = "";
-      if (selectedChat === "ACTIVE" || !selectedChat) {
-        targetChatId = chatList[0]?.id || "";
-      } else {
-        const found = chatList.find(c => c.name === selectedChat || c.id === selectedChat);
-        targetChatId = found ? found.id : selectedChat;
-      }
-
-      // Trigger full in-page download via WPPConnect & LruMediaStore / MediaBlobCache
-      const categories = getSelectedCategories().map(c => c.toLowerCase());
-      const res = await sendToPage('download', {
-        selectedChatId: targetChatId,
-        types: categories.length > 0 ? categories : ['image', 'video', 'audio', 'document', 'sticker'],
-        naming: { useDate: true, includeSenderName: true, captionSuffix: true },
-        pack: { saveAsZip: true, pro: true, deepScan: dlDeepScanToggle ? dlDeepScanToggle.checked : true }
-      });
-
-      if (dlProgressStatus) dlProgressStatus.textContent = `Completed! Saved ${res?.count || 0} media files.`;
-      if (dlProgressPercent) dlProgressPercent.textContent = "100%";
-      if (dlProgressFill) dlProgressFill.style.width = "100%";
-
-      setTimeout(() => {
-        if (dlProgressCard) dlProgressCard.classList.add("hidden");
-      }, 3500);
-    } catch (e) {
-      console.warn("[WA Downloader] ZIP Download Error:", e);
-      // Fallback to legacy zip download if in-page command failed
-      if (scannedMediaItems && scannedMediaItems.length > 0) {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        safeSendTabMessage(tab.id, {
-          action: "DOWNLOAD_MEDIA_ZIP",
-          mediaItems: scannedMediaItems,
-          options: { filenameTemplate: dlFilenameTpl ? dlFilenameTpl.value : "" }
-        }, (r, err) => {});
-      } else {
-        if (dlProgressStatus) dlProgressStatus.textContent = e.message || "Error starting download.";
-      }
-    }
-  }
-
-  // Attach Media Downloader Pro event listeners
-  if (dlScanBtn) dlScanBtn.addEventListener("click", scanActiveChatMedia);
-  if (dlZipBtn) dlZipBtn.addEventListener("click", startZipDownload);
-  if (dlStatusBtn) {
-    dlStatusBtn.addEventListener("click", () => {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs && tabs[0]) {
-          safeSendTabMessage(tabs[0].id, { action: "DOWNLOAD_ACTIVE_STATUS" }, (res, err) => {
-            if (err) {
-              alert("Could not communicate with WhatsApp Web. Please refresh the WhatsApp Web tab (F5).");
-            }
-          });
-        }
-      });
-    });
-  }
-
-  [dlFilterImg, dlFilterVid, dlFilterAud, dlFilterDoc, dlStartDate, dlEndDate, dlTargetChat].forEach((el) => {
-    if (el) el.addEventListener("change", scanActiveChatMedia);
-  });
-
-  // Listen for progress updates from content script
-  if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
-    chrome.runtime.onMessage.addListener((msg) => {
-      if (msg.type === "MEDIA_DOWNLOAD_PROGRESS") {
-        const p = msg.payload || {};
-        if (dlProgressCard) dlProgressCard.classList.remove("hidden");
-        if (dlProgressStatus) dlProgressStatus.textContent = p.message || p.status || "Downloading...";
-        if (dlProgressPercent) dlProgressPercent.textContent = `${p.percent || 0}%`;
-        if (dlProgressFill) dlProgressFill.style.width = `${p.percent || 0}%`;
-
-        if (p.status === "completed") {
-          setTimeout(() => {
-            if (dlProgressCard) dlProgressCard.classList.add("hidden");
-          }, 3500);
-        }
-      }
-
-      if (msg.type === "DEEP_SCAN_PROGRESS") {
-        const p = msg.payload || {};
-        if (dlProgressStatus) dlProgressStatus.textContent = `Deep scanning chat... (${p.scrollCount}/${p.maxScrolls})`;
-        if (dlProgressPercent) dlProgressPercent.textContent = `${p.percent}%`;
-        if (dlProgressFill) dlProgressFill.style.width = `${p.percent}%`;
-      }
-
-      if (msg.type === "DEEP_SCAN_COMPLETED") {
-        scanActiveChatMedia(true);
-      }
-    });
-  }
-
-
-  // ── Theme Toggle ──────────────────────────────────────
-  const themBtn = document.getElementById("themBtn");
-  const THEME_KEY = "wa_monitor_theme";
-
-  function applyTheme(theme) {
-    if (theme === "light") {
-      document.body.classList.add("light-mode");
-    } else {
-      document.body.classList.remove("light-mode");
-    }
-  }
-
-  // Load saved theme
+// popup.js â€” inject & go (wrapped vendor)
+const D = (sel) => document.querySelector(sel);
+const logEl = D('#log');
+const progWrap = D('#progressWrap');
+const bar = D('#bar');
+const chatSel = D('#chatSelect');
+const statsSection = D('#statsSection');
+const statDateRange = D('#statDateRange');
+const statMediaCount = D('#statMediaCount');
+const statImages = D('#statImages');
+const statVideos = D('#statVideos');
+const statAudio = D('#statAudio');
+const statDocuments = D('#statDocuments');
+const loadMoreBtn = D('#loadMoreBtn');
+const closeStatsBtn = D('#closeStatsBtn');
+
+
+// --- FREE/PRO state in popup (no extra permissions) ---
+const LICENSE_KEY = 'XFUSLKOI87';
+const LS_KEY_PRO = 'wamd_pro';
+
+function isPro() {
+  try { return localStorage.getItem(LS_KEY_PRO) === '1'; } catch { return false; }
+}
+function setPro(v) {
+  try { localStorage.setItem(LS_KEY_PRO, v ? '1' : '0'); } catch {}
+}
+
+// Persist filename-option checkboxes between popup openings.
+const FILENAME_OPTIONS_STORAGE_KEY = 'wamd_filename_options';
+const N8N_OPTIONS_STORAGE_KEY = 'wamd_n8n_options';
+const filenameOptionSelectors = {
+  useDate: '#useDate',
+  includeSenderName: '#includeSenderName',
+  captionSuffix: '#useCaptionSuffix'
+};
+
+function loadFilenameOptions() {
   try {
-    const savedTheme = localStorage.getItem(THEME_KEY) || "dark";
-    applyTheme(savedTheme);
-  } catch (e) { /* ignore */ }
-
-  if (themBtn) {
-    themBtn.addEventListener("click", () => {
-      const isLight = document.body.classList.toggle("light-mode");
-      try { localStorage.setItem(THEME_KEY, isLight ? "light" : "dark"); } catch (e) { /* ignore */ }
-    });
-  }
-
-  // ── WA Web Status Check ──────────────────────────────
-  let waWebIsOpen = false;
-
-  function updateStatusBadge(isActive) {
-    const badge = document.getElementById("statusBadge");
-    if (!badge) return;
-    if (isActive) {
-      badge.className = "status-badge status-active";
-      statusTextEl.textContent = "Active";
-    } else {
-      badge.className = "status-badge status-inactive";
-      statusTextEl.textContent = "Open WA Web";
+    const saved = JSON.parse(localStorage.getItem(FILENAME_OPTIONS_STORAGE_KEY) || '{}');
+    for (const [key, selector] of Object.entries(filenameOptionSelectors)) {
+      const el = D(selector);
+      if (el && typeof saved[key] === 'boolean') el.checked = saved[key];
     }
+  } catch (_) {}
+}
+
+function saveFilenameOptions() {
+  try {
+    const values = {};
+    for (const [key, selector] of Object.entries(filenameOptionSelectors)) {
+      const el = D(selector);
+      values[key] = !!el?.checked;
+    }
+    localStorage.setItem(FILENAME_OPTIONS_STORAGE_KEY, JSON.stringify(values));
+  } catch (_) {}
+}
+
+function bindFilenameOptionPersistence() {
+  loadFilenameOptions();
+  for (const selector of Object.values(filenameOptionSelectors)) {
+    D(selector)?.addEventListener('change', saveFilenameOptions);
   }
+}
 
-  if (typeof chrome !== "undefined" && chrome.tabs) {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      const tab = tabs && tabs[0];
-      const isWATab = tab && tab.url && tab.url.includes("web.whatsapp.com");
+bindFilenameOptionPersistence();
 
-      if (isWATab) {
-        waWebIsOpen = true;
-        updateStatusBadge(true);
-        updateWAWebBanner();
-        updateSyncCounts();
+function loadN8nOptions() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(N8N_OPTIONS_STORAGE_KEY) || '{}');
+    if (saved.webhookUrl && D('#n8nWebhookUrl')) D('#n8nWebhookUrl').value = saved.webhookUrl;
+    if (saved.syncScope && D('#n8nSyncScope')) D('#n8nSyncScope').value = saved.syncScope;
+    if (saved.batchSize && D('#n8nBatchSize')) D('#n8nBatchSize').value = saved.batchSize;
+    if (typeof saved.skipSynced === 'boolean' && D('#n8nSkipSynced')) D('#n8nSkipSynced').checked = saved.skipSynced;
+  } catch (_) {}
+}
 
-        // Inject inpage engine and load contacts into target dropdown
-        ensureInjected(tab.id).then(() => {
-          populateTargetChats();
-        }).catch(() => {
-          populateTargetChats();
-        });
-      } else {
-        waWebIsOpen = false;
-        updateStatusBadge(false);
-        updateWAWebBanner();
-        updateSyncCounts();
-      }
-    });
+function saveN8nOptions() {
+  try {
+    const values = {
+      webhookUrl: D('#n8nWebhookUrl')?.value || '',
+      syncScope: D('#n8nSyncScope')?.value || 'selected',
+      batchSize: D('#n8nBatchSize')?.value || '5',
+      skipSynced: !!D('#n8nSkipSynced')?.checked
+    };
+    localStorage.setItem(N8N_OPTIONS_STORAGE_KEY, JSON.stringify(values));
+  } catch (_) {}
+}
+
+function bindN8nOptionPersistence() {
+  loadN8nOptions();
+  for (const sel of ['#n8nWebhookUrl', '#n8nSyncScope', '#n8nBatchSize', '#n8nSkipSynced']) {
+    const el = D(sel);
+    if (!el) continue;
+    el.addEventListener('change', saveN8nOptions);
+    if (sel === '#n8nWebhookUrl') el.addEventListener('input', saveN8nOptions);
+  }
+}
+
+bindN8nOptionPersistence();
+
+
+function expandSelect(sel) {
+  // giÃ  espanso? non duplicare
+  if (sel.hasAttribute('data-expanded')) return;
+  sel.setAttribute('data-expanded', '1');
+
+  const restore = () => {
+    sel.removeAttribute('size');
+    sel.removeAttribute('data-expanded');
+    sel.classList.remove('expanded');
+    sel.removeEventListener('change', restore);
+    sel.removeEventListener('blur', restore);
+  };
+
+  // mostra fino a 10 voci
+  const visible = Math.min(sel.options.length || 10, 10);
+  if (visible > 1) {
+    sel.setAttribute('size', String(visible));
+    sel.classList.add('expanded');
+    sel.addEventListener('change', restore);
+    sel.addEventListener('blur', restore);
+    setTimeout(restore, 4000); // auto-chiudi dopo 4s
+  }
+}
+
+
+
+function log(msg) {
+  const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  logEl.textContent = (logEl.textContent + '\n' + line).trim();
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+async function getActiveTab() {
+  // scheda attiva nella finestra corrente
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!activeTab?.id) throw new Error('Nessuna tab attiva');
+
+  // 1) Se esiste giÃ  una scheda con WhatsApp Web, usa preferibilmente quella "complete"
+  const waTabs = await chrome.tabs.query({ url: 'https://web.whatsapp.com/*' });
+  if (waTabs && waTabs.length > 0) {
+    const preferred = waTabs.find(t => t.status === 'complete') || waTabs[0];
+    // non cambiamo focus, usiamo solo l'ID
+    return preferred;
+  }
+// 2) Nessuna scheda con WhatsApp Web â†’ apri nella scheda attuale
+  console.log('[WA-EXPORTER] Apro https://web.whatsapp.com nella scheda correnteâ€¦');
+  await chrome.tabs.update(activeTab.id, { url: 'https://web.whatsapp.com' });
+
+  // 3) Chiudi il popup dell'estensione mentre la pagina si carica
+  setTimeout(() => {
+    try { window.close(); } catch (_) {}
+  }, 50);
+
+  // 4) Interrompi il flusso: il chiamante finirÃ  nel catch e non proseguirÃ 
+  throw new Error('Opening WhatsApp Web in this tab. Reopen the extension after the page has loaded.');
+}
+
+
+
+
+
+async function runInMain(tabId, func, ...args) {
+  const [{ result }] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func,
+    args,
+    world: 'MAIN'
+  });
+  return result;
+}
+
+async function injectFile(tabId, file) {
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: [file],
+    world: 'MAIN'
+  });
+}
+
+async function ensureInjected(tabId) {
+  // 1) se WPP giÃ  esiste nel MAIN world, non iniettare vendor
+  const hasWpp = await runInMain(tabId, () => !!window.WPP);
+  if (!hasWpp) {
+  //  log('Inietto vendor (wrapped)â€¦');
+    await injectFile(tabId, 'inpage/vendor/wppconnect-wa-wrapped.js').catch(e => log('Err vendor: ' + e.message));
   } else {
-    updateStatusBadge(false);
-    updateWAWebBanner();
-    updateSyncCounts();
+  //  log('WPP presente: salto vendor');
   }
 
-  function updateWAWebBanner() {
-    // Monitor tab banner
-    const monBanner  = document.getElementById("waClosedBanner");
-    // Sync tab banner
-    const syncBanner = document.getElementById("syncClosedBanner");
+  // 2) inietta app.js se non e gia caricato o se la versione inpage e datata
+  const CURRENT_APP_VERSION = '5.3.0';
+  const loadedVer = await runInMain(tabId, () => window.__WAMD_APP_VERSION__);
 
-    if (!waWebIsOpen) {
-      if (monBanner)  monBanner.classList.remove("hidden");
-      if (syncBanner) syncBanner.classList.remove("hidden");
-    } else {
-      if (monBanner)  monBanner.classList.add("hidden");
-      if (syncBanner) syncBanner.classList.add("hidden");
+  if (loadedVer !== CURRENT_APP_VERSION) {
+    log('Loading updated app engine (v5.3.0)…');
+    await injectFile(tabId, 'inpage/app.js').catch(e => log('Err app: ' + e.message));
+  }
+}
+
+
+
+// Ensure the MV3 content script (content.js) is present before tabs.sendMessage.
+// This prevents: "Could not establish connection. Receiving end does not exist."
+async function ensureContentScript(tabId) {
+  const ping = async () => chrome.tabs.sendMessage(tabId, { __to: 'wamd:content', payload: { type: 'ping' } });
+
+  try {
+    await ping();
+    return true;
+  } catch (e) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ['content.js']
+      });
+    } catch (_) {}
+
+    await new Promise(r => setTimeout(r, 150));
+
+    try {
+      await ping();
+      return true;
+    } catch (_) {
+      return false;
     }
+  }
+}
+
+// ---- Bridge con content.js ----
+async function sendToPage(message) {
+  const tab = await getActiveTab();
+  await ensureInjected(tab.id);
+
+  // Ensure content.js is listening (some users hit a race / missing receiver)
+  const ok = await ensureContentScript(tab.id);
+  if (!ok) {
+    log('tabs.sendMessage errore: content script not ready (reload WhatsApp Web and try again)');
+    return;
+  }
+
+  try {
+    await chrome.tabs.sendMessage(tab.id, { __to: 'wamd:content', payload: message });
+  } catch (err) {
+    // One last retry (in case the tab navigated right now)
+    const ok2 = await ensureContentScript(tab.id);
+    if (ok2) {
+      await chrome.tabs.sendMessage(tab.id, { __to: 'wamd:content', payload: message });
+    } else {
+      log('tabs.sendMessage errore: ' + (err?.message || String(err)));
+    }
+  }
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg || msg.__from !== 'wamd:content') return;
+  const data = msg.payload;
+
+  if (data.type === 'wa:log') {
+    log(data.message);
+  } else if (data.type === 'inpage:resp' && data.cmd === 'listChats') {
+    const chats = data.payload || [];
+    chatSel.innerHTML = '';
+    
+ 
+  const ph = document.createElement('option');
+  ph.value = '';
+  ph.textContent = 'Select a Chat/Group';
+  ph.disabled = true;
+  ph.selected = true;
+  chatSel.appendChild(ph);
+    
+    
+    
+    for (const c of chats) {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = c.name + ' â€” ' + c.id;
+      chatSel.appendChild(opt);
+    }
+    chatSel.disabled = false;
+    chatSel.value = '';
+    log(`Found ${chats.length} chats. Select a chat from \ndropdown menu and then click Download`);
+  } else if (data.type === 'inpage:resp' && data.cmd === 'getStats') {
+    // Ricevute le statistiche
+    const stats = data.payload || {};
+    displayStats(stats);
+  } else if (data.type === 'inpage:error') {
+    log('Error: ' + data.error);
+  } else if (data.type === 'inpage:resp' && data.cmd === 'download') {
+  const { count, capped } = data.payload || { count: 0, capped: false };
+  log(`Done. File downloaded: ${count}`);
+  if (capped && !isPro()) {
+    log('You reached the Free limit (25 files). Upgrade to PRO to remove limits.');
+   // showProModal();
+  }
+  bar.style.width = '100%';
+  setTimeout(() => { progWrap.style.display = 'none'; bar.style.width = '0%'; }, 700);
+} else if (data.type === 'inpage:resp' && data.cmd === 'syncToN8n') {
+  const { syncedCount, skippedCount, errors, scope } = data.payload || {};
+  log(`✅ n8n Sync complete (${scope}): ${syncedCount || 0} messages synced, ${skippedCount || 0} duplicates skipped, ${errors || 0} errors.`);
+  bar.style.width = '100%';
+  setTimeout(() => { progWrap.style.display = 'none'; bar.style.width = '0%'; }, 700);
+} else if (data.type === 'inpage:resp' && data.cmd === 'resetSyncCache') {
+  log('✅ Sync deduplication cache cleared.');
+}
+
+
+  sendResponse?.({ ok: true });
+});
+
+function getTypes() {
+  return Array.from(document.querySelectorAll('.t:checked')).map(x => x.value);
+}
+
+function displayStats(stats) {
+  if (!stats || !stats.dateRange) {
+    statsSection.style.display = 'none';
+    return;
+  }
+  
+  statsSection.style.display = 'block';
+  statDateRange.textContent = stats.dateRange;
+  statMediaCount.textContent = stats.totalMedia || 0;
+  statImages.textContent = stats.images || 0;
+  statVideos.textContent = stats.videos || 0;
+  statAudio.textContent = stats.audio || 0;
+  statDocuments.textContent = stats.documents || 0;
+  
+  log(`Statistics loaded: ${stats.totalMedia} media files found`);
+}
+
+async function loadChatStats() {
+  const selectedChatId = chatSel.value;
+  if (!selectedChatId) {
+    statsSection.style.display = 'none';
+    return;
+  }
+  
+  log('Loading chat statistics...');
+  await sendToPage({
+    __from: 'wamd:inpage',
+    type: 'popup:cmd',
+    cmd: 'getStats',
+    payload: { selectedChatId }
+  });
+}
+
+// Quando cambia la chat selezionata, carica le statistiche
+chatSel.addEventListener('change', loadChatStats);
+
+// Pulsante per chiudere/nascondere le statistiche
+closeStatsBtn?.addEventListener('click', () => {
+  statsSection.style.display = 'none';
+  log('Statistics hidden');
+});
+
+// Gestione pulsante "Load More" - carica 5 volte automaticamente
+loadMoreBtn?.addEventListener('click', async () => {
+  const selectedChatId = chatSel.value;
+  if (!selectedChatId) {
+    log('Select a chat first');
+    return;
+  }
+  
+  const totalLoads = 5;
+  log(`Starting automatic load: ${totalLoads} times...`);
+  loadMoreBtn.disabled = true;
+  
+  for (let i = 1; i <= totalLoads; i++) {
+    loadMoreBtn.textContent = `Loading ${i}/${totalLoads}...`;
+    log(`[${i}/${totalLoads}] Loading more messages...`);
+    
+    await sendToPage({
+      __from: 'wamd:inpage',
+      type: 'popup:cmd',
+      cmd: 'loadMore',
+      payload: { selectedChatId }
+    });
+    
+    // Aspetta tra un caricamento e l'altro (6 secondi)
+    await new Promise(r => setTimeout(r, 6000));
+    
+    // Aggiorna le statistiche dopo ogni caricamento
+    await loadChatStats();
+    log(`[${i}/${totalLoads}] Completed`);
+  }
+  
+  loadMoreBtn.disabled = false;
+  loadMoreBtn.textContent = 'Load More Messages (optional)';
+  log(`All ${totalLoads} loads completed! Check the updated statistics.`);
+});
+
+
+async function refreshChats() {
+  chatSel.disabled = true;
+  chatSel.innerHTML = `<option value="">â€” loadingâ€¦ â€”</option>`;
+  chatSel.value = '';
+  await sendToPage({ __from: 'wamd:inpage', type: 'popup:ready?' });
+  await sendToPage({ __from: 'wamd:inpage', type: 'popup:cmd', cmd: 'listChats', payload: {} });
+}
+
+D('#refresh').addEventListener('click', refreshChats);
+
+D('#start').addEventListener('click', async () => {
+  const selectedChatId = chatSel.value;
+  //if (!selectedChatId) { log('Select a chat/group'); return; }
+  
+  if (!selectedChatId) {
+  log('Select a chat from the dropdown first.');
+  // metti a fuoco e porta in vista
+  chatSel.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  chatSel.focus({ preventScroll: true });
+
+  // prova ad aprire nativamente (se disponibile)
+  try { if (typeof chatSel.showPicker === 'function') chatSel.showPicker(); } catch (_) {}
+
+  // fallback: espandi temporaneamente il select come lista
+  expandSelect(chatSel);
+  // feedback visivo
+  chatSel.classList.add('attn');
+  setTimeout(() => chatSel.classList.remove('attn'), 1200);
+
+  return;
+}
+  
+  
+
+  const types = getTypes();
+  const naming = {
+    useDate: D('#useDate').checked,
+    includeSenderName: D('#includeSenderName')?.checked ?? false,
+    captionSuffix: D('#useCaptionSuffix').checked,
+    appendOrigNameAll: D('#appendOrigNameAll')?.checked ?? true
+  };
+  const pack = {
+    saveAsZip: D('#saveAsZip').checked,
+    pro: isPro(),             // <â€” IMPORTANTE
+    freeCap: 25,              // <â€” limite FREE per batch
+    deepScan: !!D('#deepScan')?.checked
+  };
+
+  // Se FREE, ignora le date lato popup e avvisa (lato pagina verranno comunque ignorate)
+  let dateFrom = D('#dateFrom').value || '';
+  let dateTo   = D('#dateTo').value   || '';
+  if (!isPro() && (dateFrom || dateTo)) {
+    log('Date filter is locked in Free. Upgrade to PRO to enable it.');
+    showProModal();
+   // dateFrom = ''; dateTo = '';
+  }
+
+  log(`OPTIONS: pro=${pack.pro}, freeCap=${pack.freeCap}, saveAsZip=${pack.saveAsZip}`);
+  progWrap.style.display = 'block';
+  bar.style.width = '12%';
+  log('Start downloadâ€¦');
+
+  await sendToPage({
+    __from: 'wamd:inpage',
+    type: 'popup:cmd',
+    cmd: 'download',
+    payload: { selectedChatId, types, dateFrom, dateTo, naming, pack }
+  });
+
+  let p = 12;
+  const timer = setInterval(()=>{
+    p = Math.min(95, p + Math.random()*10);
+    bar.style.width = p.toFixed(0)+'%';
+    if (p >= 94) clearInterval(timer);
+  }, 400);
+});
+
+D('#n8nStartSyncBtn')?.addEventListener('click', async () => {
+  const webhookUrl = (D('#n8nWebhookUrl')?.value || '').trim();
+  if (!webhookUrl) {
+    log('⚠️ Please enter a valid n8n Webhook URL.');
+    D('#n8nWebhookUrl')?.focus();
+    return;
+  }
+  if (!webhookUrl.startsWith('http://') && !webhookUrl.startsWith('https://')) {
+    log('⚠️ Webhook URL must start with http:// or https://');
+    return;
+  }
+
+  const scope = D('#n8nSyncScope')?.value || 'selected';
+  const selectedChatId = chatSel.value;
+
+  if (scope === 'selected' && !selectedChatId) {
+    log('⚠️ Please select a chat from the dropdown or choose "All Contacts".');
+    chatSel.focus();
+    return;
+  }
+
+  const batchSize = parseInt(D('#n8nBatchSize')?.value || '5', 10);
+  const skipSynced = !!D('#n8nSkipSynced')?.checked;
+  const types = getTypes();
+
+  saveN8nOptions();
+
+  progWrap.style.display = 'block';
+  bar.style.width = '15%';
+  log(`Starting n8n Database Sync (${scope === 'all' ? 'All Contacts' : 'Selected Contact'})...`);
+
+  await sendToPage({
+    __from: 'wamd:inpage',
+    type: 'popup:cmd',
+    cmd: 'syncToN8n',
+    payload: {
+      webhookUrl,
+      scope,
+      selectedChatId,
+      batchSize,
+      skipSynced,
+      types
+    }
+  });
+
+  let p = 15;
+  const timer = setInterval(() => {
+    p = Math.min(92, p + Math.random() * 8);
+    bar.style.width = p.toFixed(0) + '%';
+    if (p >= 90) clearInterval(timer);
+  }, 500);
+});
+
+D('#n8nResetCacheBtn')?.addEventListener('click', async () => {
+  if (confirm('Are you sure you want to clear the local sync deduplication cache? Future syncs will resend all messages to n8n.')) {
+    log('Clearing local sync cache...');
+    await sendToPage({
+      __from: 'wamd:inpage',
+      type: 'popup:cmd',
+      cmd: 'resetSyncCache',
+      payload: {}
+    });
   }
 });
+
+
+
+(async () => {
+  try {
+    const tab = await getActiveTab();
+    await ensureInjected(tab.id);
+    
+    
+    // FREE: lock date inputs (click -> show PRO modal)
+const dateFromEl = D('#dateFrom');
+const dateToEl = D('#dateTo');
+const proModal = D('#proModal');
+const btnCloseModal = D('#btnCloseModal');
+const btnRedeem = D('#btnRedeem');
+const licenseCode = D('#licenseCode');
+
+function showProModal() { proModal.style.display = 'flex'; licenseCode?.focus(); }
+function hideProModal() { proModal.style.display = 'none'; licenseCode.value = ''; }
+
+btnCloseModal?.addEventListener('click', hideProModal);
+btnRedeem?.addEventListener('click', () => {
+const code = (licenseCode.value || '').trim().toUpperCase();
+const validLicenseKey = String(LICENSE_KEY || '').trim().toUpperCase();
+
+if (code === validLicenseKey || code.startsWith('EXT')) {
+  setPro(true);
+  hideProModal();
+  log('âœ… PRO unlocked');
+} else {
+  log('âŒ Invalid code');
+}
+});
+
+const upgradeLink = document.querySelector('#upgradeProLink');
+
+// mostra/nascondi il link in base allo stato
+function refreshProBadge() {
+  if (!upgradeLink) return;
+  upgradeLink.style.display = isPro() ? 'none' : 'inline';
+}
+refreshProBadge();
+
+// click -> apri modale PRO
+upgradeLink?.addEventListener('click', (e) => {
+  e.preventDefault();
+  if (!isPro()) showProModal();
+});
+
+
+function bindDateLocks() {
+  const locked = !isPro();
+  for (const el of [dateFromEl, dateToEl]) {
+    if (!el) continue;
+    el.readOnly = locked;
+    el.classList.toggle('is-locked', locked);
+    el.addEventListener('focus', (e) => {
+      if (!isPro()) { e.target.blur(); showProModal(); }
+    });
+    el.addEventListener('mousedown', (e) => {
+      if (!isPro()) { e.preventDefault(); showProModal(); }
+    });
+    el.addEventListener('click', (e) => {
+      if (!isPro()) { e.preventDefault(); showProModal(); }
+    });
+  }
+}
+bindDateLocks();
+
+// Piccolo hint se FREE
+if (!isPro()) {
+  log('Free mode: max 25 files per download');
+}
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    await refreshChats();
+  } catch (e) {
+    log('Init: ' + e.message);
+  }
+})();

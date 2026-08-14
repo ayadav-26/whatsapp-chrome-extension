@@ -1,22 +1,31 @@
 {
+"update_url": "https://clients2.google.com/service/update2/crx",
+
   "manifest_version": 3,
-  "name": "WhatsApp Web Message Monitor & Media Downloader Pro",
-  "version": "2.0.0",
-  "description": "Production-quality Chrome Extension for real-time message monitoring, automatic sending, API sync, and bulk media downloading as ZIP on WhatsApp Web.",
+  "name": "WA Media Downloader Pro",
+  "description": "Automatically download media files from WhatsApp chats and groups",
+  "version": "5.2.8",
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png",
+    "256": "icons/256.png",
+    "512": "icons/512.png"
+  },
   "permissions": [
-    "storage",
-    "unlimitedStorage",
-    "tabs",
     "downloads",
+    "activeTab",
     "scripting"
   ],
   "host_permissions": [
-    "https://web.whatsapp.com/*",
-    "http://*/*",
-    "https://*/*"
+    "https://web.whatsapp.com/*"
   ],
   "background": {
     "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
   },
   "content_scripts": [
     {
@@ -24,34 +33,6 @@
         "https://web.whatsapp.com/*"
       ],
       "js": [
-        "injected.js"
-      ],
-      "run_at": "document_start",
-      "world": "MAIN"
-    },
-    {
-      "matches": [
-        "https://web.whatsapp.com/*"
-      ],
-      "js": [
-        "utils/constants.js",
-        "utils/helpers.js",
-        "utils/tabManager.js",
-        "utils/domHelper.js",
-        "utils/chatNavigator.js",
-        "utils/attachmentUploader.js",
-        "utils/messageSender.js",
-        "utils/mediaParser.js",
-        "utils/messageParser.js",
-        "utils/jszip.min.js",
-        "utils/deepScanner.js",
-        "utils/mediaDownloader.js",
-        "utils/mediaOverlay.js",
-        "utils/storage.js",
-        "utils/chatDetector.js",
-        "utils/syncManager.js",
-        "utils/observer.js",
-        "services/media-extractor.js",
         "content.js"
       ],
       "run_at": "document_idle"
@@ -60,20 +41,13 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "injected.js",
         "inpage/vendor/wppconnect-wa-wrapped.js",
         "inpage/app.js",
-        "inpage/wa-injector.js",
-        "lib/wppconnect-wa-wrapped.js"
+        "assets/logo.svg"
       ],
       "matches": [
         "https://web.whatsapp.com/*"
       ]
     }
-  ],
-  "action": {
-    "default_popup": "popup.html",
-    "default_title": "WhatsApp Monitor & Media Downloader Pro"
-  }
+  ]
 }
-
